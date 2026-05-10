@@ -7,16 +7,16 @@ class Task:
     """Unified specification for beamforming tasks."""
     type: str  # 'pencil', 'sector', 'multitarget', 'nulled'
     target_angles: List[float] = field(default_factory=list) # in u-space
-    target_gains: List[float] = field(default_factory=list)  # linear magnitude
+    target_gains: List[float] = field(default_factory=list)  # linear magnitude (relative to N)
     null_angles: List[float] = field(default_factory=list)   # in u-space
     null_depth: float = 0.00316  # -50 dB default
-    sll_ceiling: float = 0.1     # -20 dB default
+    sll_ceiling: float = 0.1     # -20 dB default (relative to N)
     beamwidth: float = 0.1       # u-space half-width of main lobe
 
     sector_u_min: Optional[float] = None
     sector_u_max: Optional[float] = None
 
-def pattern_project(F, u_grid, task: Task):
+def pattern_project(F, u_grid, task: Task, N: int):
     """
     Projects the current pattern F onto the task constraints.
     Critically: only modifies magnitude where necessary, preserving phase.
@@ -43,23 +43,26 @@ def pattern_project(F, u_grid, task: Task):
 
     # 1. Enforce SLL ceiling in sidelobe regions
     sidelobe_region = ~is_main_lobe
-    violates_sll = sidelobe_region & (mag_F > task.sll_ceiling)
-    F_new[violates_sll] = task.sll_ceiling * phase_F[violates_sll]
+    sll_abs = task.sll_ceiling * N
+    violates_sll = sidelobe_region & (mag_F > sll_abs)
+    F_new[violates_sll] = sll_abs * phase_F[violates_sll]
 
     # 2. Enforce target gains in main lobe (if specified)
     if task.target_gains:
         for u_t, g in zip(task.target_angles, task.target_gains):
             # Find closest grid point
             idx = np.argmin(np.abs(u_grid - u_t))
-            if mag_F[idx] < g:
-                F_new[idx] = g * phase_F[idx]
+            g_abs = g * N
+            if mag_F[idx] < g_abs:
+                F_new[idx] = g_abs * phase_F[idx]
 
     # 3. Enforce Nulls
+    null_abs = task.null_depth * N
     for u_null in task.null_angles:
         # Find closest grid point
         idx = np.argmin(np.abs(u_grid - u_null))
-        if mag_F[idx] > task.null_depth:
+        if mag_F[idx] > null_abs:
             # Soft null with magnitude ceiling
-            F_new[idx] = task.null_depth * phase_F[idx]
+            F_new[idx] = null_abs * phase_F[idx]
 
     return F_new

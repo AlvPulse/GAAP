@@ -3,6 +3,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use the non-interactive 'Agg' backend
 import matplotlib.pyplot as plt
 import sys
+import os
 sys.path.append('..')
 
 from beamformer.pattern_projection import Task
@@ -19,9 +20,11 @@ def main():
     #element = SyntheticVaractor(beta=1, folding=False) # Severe non-linearity
     element = IdealElement() # Severe non-linearity
 
+    debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
+
     # 2. Run Geometry-Aware AP
-    print("Starting AP Optimization...")
-    res = beamform(task, element, N=N, K_max=50)
+    print(f"Starting AP Optimization... (Debugging output to {debug_dir})")
+    res = beamform(task, element, N=N, K_max=50, debug_dir=debug_dir)
 
     # 3. Analyze Results
     print(f"Final Residual: {res['history']['residuals'][-1]:.4f}")

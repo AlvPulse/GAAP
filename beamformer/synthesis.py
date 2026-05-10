@@ -7,8 +7,7 @@ def get_steering_vector(N, u_target):
     w_n = exp(-j * pi * n * u_target)
     """
     n = np.arange(N)
-    # Phase progression for steering
-    return np.exp(1j * np.pi * n * u_target)
+    return np.exp(-1j * np.pi * n * u_target)
 
 def synthesize_pencil(N, u_target):
     """

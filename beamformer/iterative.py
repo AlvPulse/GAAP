@@ -1,10 +1,11 @@
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 
 from .utils import oversampled_fft, oversampled_ifft
 from .pattern_projection import pattern_project, Task
 from .element_model import ElementData
 from .offset_controller import GeometryAwareOffsetController
+from .debug_utils import DebugLogger
 
 def optimize_beam_ap(
     task: Task,
@@ -14,8 +15,9 @@ def optimize_beam_ap(
     initial_delta: float = 0.0,
     K_max: int = 50,
     tol: float = 1e-4,
-    oversample_factor: int = 8
-) -> Tuple[np.ndarray, float, np.ndarray]:
+    oversample_factor: int = 8,
+    debug_dir: Optional[str] = None
+) -> Tuple[np.ndarray, float, np.ndarray, dict]:
     """
     Measured-manifold Alternating Projection with Geometry-Aware Offset Control.
 
@@ -36,6 +38,17 @@ def optimize_beam_ap(
     # Warm start projection onto hardware
     for n in range(N):
         V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * delta))
+
+    logger = None
+    if debug_dir:
+        logger = DebugLogger(debug_dir, task, element, N)
+        # Convert ideal to coherent hardware weights for baseline
+        coh_V = np.zeros(N)
+        coh_c = np.zeros(N, dtype=np.complex128)
+        for n in range(N):
+            coh_V[n], coh_c[n] = element.project(initial_weights[n])
+        logger.log_initial_state(coh_c, coh_V)
+        logger.log_iteration(delta, float('inf'), c_n, V_n)
 
     history = {
         'residuals': [],
@@ -61,7 +74,7 @@ def optimize_beam_ap(
         u_grid, F = oversampled_fft(rotated_c_n, oversample_factor)
 
         # Project pattern
-        F_prime = pattern_project(F, u_grid, task)
+        F_prime = pattern_project(F, u_grid, task, N)
 
         # Damped update in pattern domain
         F_prime_damped = (1 - tau) * F + tau * F_prime
@@ -101,6 +114,9 @@ def optimize_beam_ap(
         history['taus'].append(tau)
         history['alphas'].append(alpha)
 
+        if logger:
+            logger.log_iteration(delta, current_residual, c_n, V_n)
+
         if current_residual < best_residual:
             best_residual = current_residual
             best_V_n = V_n.copy()
@@ -112,5 +128,8 @@ def optimize_beam_ap(
             volt_change = np.max(np.abs(history['voltages'][-1] - history['voltages'][-2]))
             if volt_change < tol and current_residual < tol:
                 break
+
+    if logger:
+        logger.generate_report()
 
     return best_V_n, best_delta, best_c_n, history
