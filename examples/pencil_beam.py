@@ -1,10 +1,12 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use the non-interactive 'Agg' backend
 import matplotlib.pyplot as plt
 import sys
 sys.path.append('..')
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, IdealElement
 from beamformer.api import beamform
 from beamformer.utils import oversampled_fft
 
@@ -14,7 +16,8 @@ def main():
     # 1. Setup
     N = 64
     task = Task('pencil', target_angles=[0.5], sll_ceiling=0.1) # -20 dB SLL
-    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
+    #element = SyntheticVaractor(beta=1, folding=False) # Severe non-linearity
+    element = IdealElement() # Severe non-linearity
 
     # 2. Run Geometry-Aware AP
     print("Starting AP Optimization...")
@@ -32,7 +35,7 @@ def main():
     # Plotting
     plt.figure(figsize=(10, 5))
     plt.plot(u_ideal, ideal_dB - np.max(ideal_dB), '--', color='gray', label='Coherent Baseline')
-    plt.plot(u, power_dB - np.max(power_dB), 'b', label='Geometry-Aware AP')
+    plt.plot(u, power_dB - np.max(ideal_dB), 'b', label='Geometry-Aware AP')
     plt.axhline(20*np.log10(task.sll_ceiling), color='r', linestyle=':', label='SLL Ceiling')
     plt.axvline(0.5, color='green', linestyle=':', label='Target')
     plt.ylim(-40, 5)
@@ -44,6 +47,7 @@ def main():
     plt.grid(True)
     plt.savefig('pencil_beam_result.png')
     print("Saved plot to pencil_beam_result.png")
+    print ("final_delta= ",res['final_delta'])
 
 if __name__ == '__main__':
     main()

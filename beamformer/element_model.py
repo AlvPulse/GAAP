@@ -34,9 +34,10 @@ class SyntheticVaractor(ElementData):
         """Generates the complex manifold c_n(V)."""
         # Normalize V to [0, 1]
         v_norm = (V - self.v_min) / (self.v_max - self.v_min)
-
+        print(type(v_norm))
+        v_norm=np.sort(v_norm)
         # Base phase traversal
-        phi = 2 * np.pi * v_norm * 1.5 # goes up to 3 pi
+        phi = 2 * np.pi * v_norm * 1.2 # goes up to 3 pi
 
         if self.folding:
             # Non-monotonic phase profile (wiggles back)
@@ -51,6 +52,7 @@ class SyntheticVaractor(ElementData):
 
         # Clip amplitude to physically realistic values
         A = np.clip(A, 0.05, 1.0)
+        print(np.array([v_norm,phi*180/3.1415,A]))
 
         return A * np.exp(1j * phi)
 
