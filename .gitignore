@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.png
 .ipynb_checkpoints/
+debug_results/
+pencil_beam_result.png
+sector_beam_result.png
+multi_target_result.png

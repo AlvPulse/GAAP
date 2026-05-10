@@ -12,6 +12,7 @@ def beamform(
     N: int,
     initial_delta: float = 0.0,
     K_max: int = 50,
+    debug_dir: str = None,
     **kwargs
 ):
     """
@@ -38,6 +39,7 @@ def beamform(
         initial_weights=initial_weights,
         initial_delta=initial_delta,
         K_max=K_max,
+        debug_dir=debug_dir,
         **kwargs
     )
 
