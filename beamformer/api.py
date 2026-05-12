@@ -14,6 +14,8 @@ def beamform(
     initial_delta: float = 0.0,
     K_max: int = 50,
     debug_dir: str = None,
+    taper: str = None,
+    sll_db: float = 30,
     **kwargs
 ):
     """
@@ -21,14 +23,29 @@ def beamform(
     """
 
     # 1. Warm start
-    if task.type in ['pencil', 'nulled']:
+    if task.type == 'pencil':
         if len(task.target_angles) == 0:
             raise ValueError("Pencil beam requires at least one target_angle")
-        initial_weights = synthesize_pencil(N, task.target_angles[0])
+        initial_weights = synthesize_pencil(N, task.target_angles[0], taper_type=taper, sll_db=sll_db)
+    elif task.type == 'nulled':
+        if len(task.target_angles) == 0:
+            raise ValueError("Nulled beam requires at least one target_angle")
+
+        null_init_method = kwargs.get('null_init_method', 'schelkunoff')
+
+        from .synthesis import synthesize_schelkunoff, synthesize_phase_only_lms
+
+        if null_init_method == 'schelkunoff':
+            initial_weights = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
+        elif null_init_method == 'lms':
+            initial_weights = synthesize_phase_only_lms(N, task.target_angles[0], task.null_angles)
+        else:
+            initial_weights = synthesize_pencil(N, task.target_angles[0], taper_type=taper, sll_db=sll_db)
+
     elif task.type == 'sector':
-        initial_weights = synthesize_sector(N, task.sector_u_min, task.sector_u_max)
+        initial_weights = synthesize_sector(N, task.sector_u_min, task.sector_u_max, taper_type=taper, sll_db=sll_db)
     elif task.type == 'multitarget':
-        initial_weights = synthesize_multitarget(N, task.target_angles, task.target_gains)
+        initial_weights = synthesize_multitarget(N, task.target_angles, task.target_gains, taper_type=taper, sll_db=sll_db)
     else:
         raise ValueError(f"Unknown task type: {task.type}")
 
@@ -36,6 +53,7 @@ def beamform(
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(initial_weights, element)
 
     # 2. Iterate
+    use_pattern_cost = kwargs.pop('use_pattern_cost', False)
     V_n, final_delta, c_n, history = optimize_beam_ap(
         task=task,
         element=element,
@@ -44,6 +62,7 @@ def beamform(
         initial_delta=initial_delta,
         K_max=K_max,
         debug_dir=debug_dir,
+        use_pattern_cost=use_pattern_cost,
         baseline_weights=baseline_c_n,
         **kwargs
     )

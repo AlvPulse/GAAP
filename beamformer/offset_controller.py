@@ -5,8 +5,9 @@ class GeometryAwareOffsetController:
     Controls the global phase offset dynamically during the AP iteration based on
     convergence geometry diagnostics, avoiding direct grid-search optimization.
     """
-    def __init__(self, initial_delta=0.0):
+    def __init__(self, initial_delta=0.0, use_pattern_cost=False):
         self.delta = initial_delta
+        self.use_pattern_cost = use_pattern_cost
 
         # History for diagnostics
         self.residuals = []
@@ -29,6 +30,7 @@ class GeometryAwareOffsetController:
             return self.delta, tau, alpha
 
         # Diagnostics
+        # When using pattern cost, current_residual is actually the scalar pattern cost
         res_change = self.residuals[-1] - self.residuals[-2]
 
         # Branch instability check (voltage jumps)

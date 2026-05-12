@@ -6,6 +6,7 @@ from .pattern_projection import pattern_project, Task
 from .element_model import ElementData
 from .offset_controller import GeometryAwareOffsetController
 from .debug_utils import DebugLogger
+from .cost_functions import evaluate_pattern_cost
 
 def optimize_beam_ap(
     task: Task,
@@ -17,6 +18,7 @@ def optimize_beam_ap(
     tol: float = 1e-4,
     oversample_factor: int = 8,
     debug_dir: Optional[str] = None,
+    use_pattern_cost: bool = False,
     **kwargs
 ) -> Tuple[np.ndarray, float, np.ndarray, dict]:
     """
@@ -32,7 +34,7 @@ def optimize_beam_ap(
     # Init
     c_n = initial_weights.copy()
     delta = initial_delta
-    controller = GeometryAwareOffsetController(initial_delta=delta)
+    controller = GeometryAwareOffsetController(initial_delta=delta, use_pattern_cost=use_pattern_cost)
 
     V_n = np.zeros(N)
 
@@ -109,7 +111,12 @@ def optimize_beam_ap(
             current_residual += np.abs(c_cand[n] - c_proj[n])**2
 
         # 3. Geometry-Aware Offset Control
-        delta_new, suggested_tau, suggested_alpha = controller.update(current_residual, V_cand, k)
+        metric_for_controller = current_residual
+        if use_pattern_cost:
+            # We want to test if the achieved c_n so far is better.
+            metric_for_controller = evaluate_pattern_cost(c_n, task, oversample_factor)
+
+        delta_new, suggested_tau, suggested_alpha = controller.update(metric_for_controller, V_cand, k)
 
         # Apply offset shift
         delta = delta_new
