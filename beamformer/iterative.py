@@ -16,7 +16,8 @@ def optimize_beam_ap(
     K_max: int = 50,
     tol: float = 1e-4,
     oversample_factor: int = 8,
-    debug_dir: Optional[str] = None
+    debug_dir: Optional[str] = None,
+    **kwargs
 ) -> Tuple[np.ndarray, float, np.ndarray, dict]:
     """
     Measured-manifold Alternating Projection with Geometry-Aware Offset Control.
@@ -35,6 +36,9 @@ def optimize_beam_ap(
 
     V_n = np.zeros(N)
 
+    # Determine optional baseline if provided for debug
+    baseline_weights = kwargs.get('baseline_weights', None)
+
     # Warm start projection onto hardware
     for n in range(N):
         V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * delta))
@@ -47,7 +51,7 @@ def optimize_beam_ap(
         coh_c = np.zeros(N, dtype=np.complex128)
         for n in range(N):
             coh_V[n], coh_c[n] = element.project(initial_weights[n])
-        logger.log_initial_state(coh_c, coh_V)
+        logger.log_initial_state(coh_c, coh_V, baseline_weights=baseline_weights)
         logger.log_iteration(delta, float('inf'), c_n, V_n)
 
     history = {
@@ -62,6 +66,10 @@ def optimize_beam_ap(
     tau = 0.7
     alpha = 0.7
 
+    # NEW STEPPED APPROACH:
+    # Instead of fully projecting and losing the beam, we will maintain a stronger
+    # anchor to the ideal weights.
+
     best_residual = float('inf')
     best_V_n = V_n.copy()
     best_delta = delta
@@ -73,10 +81,18 @@ def optimize_beam_ap(
         rotated_c_n = c_n * np.exp(1j * delta)
         u_grid, F = oversampled_fft(rotated_c_n, oversample_factor)
 
-        # Project pattern
+        # Project pattern (enforcing task constraints like SLL and nulls)
         F_prime = pattern_project(F, u_grid, task, N)
 
-        # Damped update in pattern domain
+        # We apply the alpha step in the pattern domain: we blend the ideal pattern
+        # with the current pattern to stay closer to the ideal shape instead of wildly projecting.
+        # Create ideal pattern for reference
+        _, F_ideal = oversampled_fft(initial_weights * np.exp(1j * delta), oversample_factor)
+
+        # Stepped pattern update towards ideal shape
+        F_prime = (1 - alpha) * F_prime + alpha * F_ideal
+
+        # Damped update in pattern domain (AP standard damping)
         F_prime_damped = (1 - tau) * F + tau * F_prime
 
         # 2. Hardware Domain
@@ -100,8 +116,8 @@ def optimize_beam_ap(
         tau = suggested_tau
         alpha = suggested_alpha
 
-        # Damped update in voltage domain (manifold navigation)
-        V_n = (1 - alpha) * V_n + alpha * V_cand
+        # Update voltages directly to candidates (damping is in pattern domain)
+        V_n = V_cand
 
         # Final c_n evaluated at new voltages
         for n in range(N):

@@ -5,13 +5,14 @@ from .element_model import ElementData, SyntheticVaractor
 from .synthesis import synthesize_pencil, synthesize_sector, synthesize_multitarget
 from .iterative import optimize_beam_ap
 from .geometry import scan_offset_feasibility
+from .baseline_optimization import optimize_offset_only
 
 def beamform(
     task: Task,
     element: ElementData,
     N: int,
-    initial_delta: float = 0.5,
-    K_max: int = 250,
+    initial_delta: float = 0.0,
+    K_max: int = 50,
     debug_dir: str = None,
     **kwargs
 ):
@@ -31,6 +32,9 @@ def beamform(
     else:
         raise ValueError(f"Unknown task type: {task.type}")
 
+    # Calculate optimal non-projection baseline
+    baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(initial_weights, element)
+
     # 2. Iterate
     V_n, final_delta, c_n, history = optimize_beam_ap(
         task=task,
@@ -40,6 +44,7 @@ def beamform(
         initial_delta=initial_delta,
         K_max=K_max,
         debug_dir=debug_dir,
+        baseline_weights=baseline_c_n,
         **kwargs
     )
 
@@ -48,5 +53,8 @@ def beamform(
         'final_delta': final_delta,
         'weights': c_n,
         'history': history,
-        'initial_weights': initial_weights
+        'initial_weights': initial_weights,
+        'baseline_weights': baseline_c_n,
+        'baseline_voltages': baseline_V_n,
+        'baseline_delta': baseline_delta
     }

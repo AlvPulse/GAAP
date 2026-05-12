@@ -34,10 +34,9 @@ class SyntheticVaractor(ElementData):
         """Generates the complex manifold c_n(V)."""
         # Normalize V to [0, 1]
         v_norm = (V - self.v_min) / (self.v_max - self.v_min)
-        #print(type(v_norm))
-        #v_norm=np.sort(v_norm)
+
         # Base phase traversal
-        phi = 2 * np.pi * v_norm  # goes up to 3 pi
+        phi = 2 * np.pi * v_norm * 1.5 # goes up to 3 pi
 
         if self.folding:
             # Non-monotonic phase profile (wiggles back)
@@ -45,14 +44,13 @@ class SyntheticVaractor(ElementData):
 
         # Amplitude-phase coupling (Insertion loss)
         # Insertion loss hotspot near v_norm = 0.5
-        A = 1.0 - self.beta * 0.7 * np.exp(2 * np.abs(phi/2/np.pi - 0.5)**2)
+        A = 1.0 - self.beta * 0.7 * np.exp(-15 * (v_norm - 0.5)**2)
 
         # Additional geometry distortion based on phase
-        A = A - self.beta * 0.5 * np.cos(phi)
+        A = A - self.beta * 0.15 * np.cos(phi)
 
         # Clip amplitude to physically realistic values
         A = np.clip(A, 0.05, 1.0)
-        print(A[A<0.9])
 
         return A * np.exp(1j * phi)
 
