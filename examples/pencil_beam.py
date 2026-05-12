@@ -16,9 +16,9 @@ def main():
 
     # 1. Setup
     N = 64
-    task = Task('pencil', target_angles=[0.5], sll_ceiling=0.1) # -20 dB SLL
-    #element = SyntheticVaractor(beta=1, folding=False) # Severe non-linearity
-    element = IdealElement() # Severe non-linearity
+    task = Task('pencil', target_angles=[0.3], sll_ceiling=0.1) # -20 dB SLL
+    element = SyntheticVaractor(beta=0.3, folding=False) # Severe non-linearity
+    #element = IdealElement() # Severe non-linearity
 
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
 
@@ -31,7 +31,6 @@ def main():
 
     u, F = oversampled_fft(res['weights'], oversample_factor=16)
     power_dB = 20 * np.log10(np.abs(F) + 1e-12)
-
     u_ideal, F_ideal = oversampled_fft(res['initial_weights'], oversample_factor=16)
     ideal_dB = 20 * np.log10(np.abs(F_ideal) + 1e-12)
 
