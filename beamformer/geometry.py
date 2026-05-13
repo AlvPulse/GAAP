@@ -2,7 +2,7 @@ import numpy as np
 from .element_model import ElementData
 from typing import List
 
-def scan_offset_feasibility(target_weights: np.ndarray, element: ElementData, n_steps=100):
+def scan_offset_feasibility(target_weights: np.ndarray, element: ElementData, n_steps=100, projection_method='euclidean', w_phase=1.0, w_amp=0.5):
     """
     Diagnostic geometry scan (Stage A).
     Sweeps global offset delta from 0 to 2pi and evaluates geometry metrics.
@@ -23,7 +23,7 @@ def scan_offset_feasibility(target_weights: np.ndarray, element: ElementData, n_
         sum_amp = 0.0
 
         for n in range(N):
-            best_V, best_c = element.project(rotated_targets[n])
+            best_V, best_c = element.project(rotated_targets[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
             sum_sq_err += np.abs(rotated_targets[n] - best_c)**2
             sum_amp += np.abs(best_c)
             branches[i, n] = best_V

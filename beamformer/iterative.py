@@ -19,6 +19,9 @@ def optimize_beam_ap(
     oversample_factor: int = 8,
     debug_dir: Optional[str] = None,
     use_pattern_cost: bool = False,
+    projection_method: str = 'euclidean',
+    w_phase: float = 1.0,
+    w_amp: float = 0.5,
     **kwargs
 ) -> Tuple[np.ndarray, float, np.ndarray, dict]:
     """
@@ -43,7 +46,7 @@ def optimize_beam_ap(
 
     # Warm start projection onto hardware
     for n in range(N):
-        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * delta))
+        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * delta), method=projection_method, w_phase=w_phase, w_amp=w_amp)
 
     logger = None
     if debug_dir:
@@ -52,7 +55,7 @@ def optimize_beam_ap(
         coh_V = np.zeros(N)
         coh_c = np.zeros(N, dtype=np.complex128)
         for n in range(N):
-            coh_V[n], coh_c[n] = element.project(initial_weights[n])
+            coh_V[n], coh_c[n] = element.project(initial_weights[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
         logger.log_initial_state(coh_c, coh_V, baseline_weights=baseline_weights)
         logger.log_iteration(delta, float('inf'), c_n, V_n)
 
@@ -107,7 +110,7 @@ def optimize_beam_ap(
         current_residual = 0.0
 
         for n in range(N):
-            V_cand[n], c_proj[n] = element.project(c_cand[n])
+            V_cand[n], c_proj[n] = element.project(c_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
             current_residual += np.abs(c_cand[n] - c_proj[n])**2
 
         # 3. Geometry-Aware Offset Control

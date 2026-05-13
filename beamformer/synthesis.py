@@ -21,7 +21,7 @@ def apply_taper(weights, N, taper_type=None, sll_db=30):
         return weights
 
     if taper_type == 'chebyshev':
-        taper = scipy.signal.chebwin(N, at=sll_db)
+        taper = scipy.signal.windows.chebwin(N, at=sll_db)
     elif taper_type == 'taylor':
         # Simple approximation, scipy doesn't have a direct taylor window
         # We can just use hamming or hanning as alternatives if taylor is requested

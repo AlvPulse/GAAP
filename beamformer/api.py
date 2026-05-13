@@ -16,6 +16,9 @@ def beamform(
     debug_dir: str = None,
     taper: str = None,
     sll_db: float = 30,
+    projection_method: str = 'euclidean',
+    w_phase: float = 1.0,
+    w_amp: float = 0.5,
     **kwargs
 ):
     """
@@ -50,7 +53,10 @@ def beamform(
         raise ValueError(f"Unknown task type: {task.type}")
 
     # Calculate optimal non-projection baseline
-    baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(initial_weights, element)
+    baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(
+        initial_weights, element,
+        projection_method=projection_method, w_phase=w_phase, w_amp=w_amp
+    )
 
     # 2. Iterate
     use_pattern_cost = kwargs.pop('use_pattern_cost', False)
@@ -63,6 +69,9 @@ def beamform(
         K_max=K_max,
         debug_dir=debug_dir,
         use_pattern_cost=use_pattern_cost,
+        projection_method=projection_method,
+        w_phase=w_phase,
+        w_amp=w_amp,
         baseline_weights=baseline_c_n,
         **kwargs
     )
