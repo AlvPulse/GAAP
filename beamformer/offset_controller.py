@@ -48,24 +48,42 @@ class GeometryAwareOffsetController:
         if res_change < 0 and num_flips == 0 and not is_oscillating:
             u_k = 0.0 # No need to move
 
+        # Deterministic Geometry Steering
+        # Remove randomness. Rely on physical/geometric indicators.
+        # We will use the history of delta movements to provide momentum.
+        if len(self.deltas) >= 2:
+            last_delta_step = self.deltas[-1] - self.deltas[-2]
+            # Handle wrapping difference
+            last_delta_step = (last_delta_step + np.pi) % (2 * np.pi) - np.pi
+        else:
+            last_delta_step = 0.02
+
+        # Determine movement direction deterministically
+        direction = np.sign(last_delta_step) if np.abs(last_delta_step) > 1e-5 else 1.0
+
+        # Rule 1: Stable convergence
+        if res_change < 0 and num_flips == 0 and not is_oscillating:
+            u_k = 0.0 # No need to move, just continue AP
+
         # Rule 2: Oscillation detected
         elif is_oscillating:
-            # Gently perturb delta to reshape manifold geometry locally
-            u_k = 0.05 * np.sign(np.random.randn())
+            # Deterministic small step to break symmetry/oscillation
+            u_k = 0.05 * direction
             tau *= 0.8
             alpha *= 0.8
 
         # Rule 3: Branch instability
         elif num_flips > 2:
             # High conflict, slow down offset velocity and increase damping
-            u_k = 0.01 * np.sign(np.random.randn())
+            # Move slowly away from the instability boundary
+            u_k = 0.01 * direction
             tau *= 0.5
             alpha *= 0.5
 
         # Rule 4: Stagnation
         elif np.abs(res_change) < 1e-4 and current_residual > 0.1:
-            # Drift towards lower-conflict regions
-            u_k = 0.02
+            # Drift deterministically towards lower-conflict regions
+            u_k = 0.02 * direction
         else:
             u_k = 0.0 # Default hold
 

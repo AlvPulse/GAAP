@@ -22,6 +22,9 @@ def optimize_beam_ap(
     projection_method: str = 'euclidean',
     w_phase: float = 1.0,
     w_amp: float = 0.5,
+    enable_ap: bool = True,
+    enable_offset: bool = True,
+    enable_local_refinement: bool = False,
     **kwargs
 ) -> Tuple[np.ndarray, float, np.ndarray, dict]:
     """
@@ -82,38 +85,48 @@ def optimize_beam_ap(
 
     for k in range(K_max):
         # 1. Pattern Domain
-        # FFT of rotated weights
-        rotated_c_n = c_n * np.exp(1j * delta)
-        u_grid, F = oversampled_fft(rotated_c_n, oversample_factor)
+        if enable_ap:
+            # FFT of rotated weights
+            rotated_c_n = c_n * np.exp(1j * delta)
+            u_grid, F = oversampled_fft(rotated_c_n, oversample_factor)
 
-        # Project pattern (enforcing task constraints like SLL and nulls)
-        F_prime = pattern_project(F, u_grid, task, N)
+            # Project pattern (enforcing task constraints like SLL and nulls)
+            F_prime = pattern_project(F, u_grid, task, N)
 
-        # We apply the alpha step in the pattern domain: we blend the ideal pattern
-        # with the current pattern to stay closer to the ideal shape instead of wildly projecting.
-        # Create ideal pattern for reference
-        _, F_ideal = oversampled_fft(initial_weights * np.exp(1j * delta), oversample_factor)
+            # We apply the alpha step in the pattern domain: we blend the ideal pattern
+            # with the current pattern to stay closer to the ideal shape instead of wildly projecting.
+            # Create ideal pattern for reference
+            _, F_ideal = oversampled_fft(initial_weights * np.exp(1j * delta), oversample_factor)
 
-        # Stepped pattern update towards ideal shape
-        F_prime = (1 - alpha) * F_prime + alpha * F_ideal
+            # Stepped pattern update towards ideal shape
+            F_prime = (1 - alpha) * F_prime + alpha * F_ideal
 
-        # Damped update in pattern domain (AP standard damping)
-        F_prime_damped = (1 - tau) * F + tau * F_prime
+            # Damped update in pattern domain (AP standard damping)
+            F_prime_damped = (1 - tau) * F + tau * F_prime
 
-        # 2. Hardware Domain
-        c_cand = oversampled_ifft(F_prime_damped, N)
+            c_cand = oversampled_ifft(F_prime_damped, N)
+        else:
+            # If AP is disabled, we just try to fit the un-updated ideal weights
+            # (only useful for baseline testing where delta changes but pattern does not)
+            c_cand = initial_weights * np.exp(1j * delta)
 
-        # Candidate projection
+        # 2. Hardware Domain Projection
         V_cand = np.zeros(N)
         c_proj = np.zeros(N, dtype=np.complex128)
 
         current_residual = 0.0
-
         for n in range(N):
             V_cand[n], c_proj[n] = element.project(c_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
             current_residual += np.abs(c_cand[n] - c_proj[n])**2
 
-        # 3. Geometry-Aware Offset Control
+        # 3. Local Refinement (Architectural Hook)
+        if enable_local_refinement:
+            from .local_refinement import refine_local_active_set
+            # We would initialize and pass af_cache here, but for now we just pass None
+            # until we fully implement the inner loop in later stages.
+            V_cand = refine_local_active_set(V_cand, task, element, af_cache=None)
+
+        # 4. Geometry-Aware Offset Control
         metric_for_controller = current_residual
         if use_pattern_cost:
             # We want to test if the achieved c_n so far is better.
@@ -121,12 +134,13 @@ def optimize_beam_ap(
 
         delta_new, suggested_tau, suggested_alpha = controller.update(metric_for_controller, V_cand, k)
 
-        # Apply offset shift
-        delta = delta_new
-        tau = suggested_tau
-        alpha = suggested_alpha
+        if enable_offset:
+            delta = delta_new
+            tau = suggested_tau
+            alpha = suggested_alpha
 
-        # Update voltages directly to candidates (damping is in pattern domain)
+        # 5. Damping / Stabilization
+        # Update voltages directly to candidates (damping is handled in pattern domain)
         V_n = V_cand
 
         # Final c_n evaluated at new voltages

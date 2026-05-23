@@ -19,6 +19,9 @@ def beamform(
     projection_method: str = 'euclidean',
     w_phase: float = 1.0,
     w_amp: float = 0.5,
+    enable_ap: bool = True,
+    enable_offset: bool = True,
+    enable_local_refinement: bool = False,
     **kwargs
 ):
     """
@@ -72,6 +75,9 @@ def beamform(
         projection_method=projection_method,
         w_phase=w_phase,
         w_amp=w_amp,
+        enable_ap=enable_ap,
+        enable_offset=enable_offset,
+        enable_local_refinement=enable_local_refinement,
         baseline_weights=baseline_c_n,
         **kwargs
     )
