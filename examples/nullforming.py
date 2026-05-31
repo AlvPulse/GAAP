@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import sys
 import os
 sys.path.append('..')
-sys.path.append('..\beamformer')
 
 from beamformer.pattern_projection import Task
 from beamformer.element_model import SyntheticVaractor
@@ -11,14 +10,14 @@ from beamformer.api import beamform
 from beamformer.utils import oversampled_fft
 
 def main():
-    print("Running Pencil Beam Experiment...")
+    print("Running Nulled Beam Experiment Projection Comparison...")
 
     # 1. Setup
     N = 64
-    task = Task('pencil', target_angles=[0.2,-0.3], sll_ceiling=0.1) # -20 dB SLL
-    element = SyntheticVaractor(beta=0.7, folding=False) # Severe non-linearity
+    task = Task('nulled', target_angles=[0.2], null_angles=[-0.4, 0.5])
+    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
 
-    debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
+    debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results_null')
 
     projection_methods = ['euclidean', 'phase_only', 'weighted']
     results = {}
@@ -30,8 +29,10 @@ def main():
             task,
             element,
             N=N,
-            K_max=50,
+            K_max=80,
             debug_dir=f"{debug_dir}_{method}",
+            null_init_method='schelkunoff',
+            use_pattern_cost=True,
             projection_method=method,
             w_phase=1.0,
             w_amp=0.5
@@ -44,7 +45,7 @@ def main():
 
     u_ideal, F_ideal = oversampled_fft(results['euclidean']['initial_weights'], oversample_factor=16)
     ideal_dB = 20 * np.log10(np.abs(F_ideal) + 1e-12)
-    plt.plot(u_ideal, ideal_dB - np.max(ideal_dB), '--', color='gray', label='Coherent Baseline')
+    plt.plot(u_ideal, ideal_dB - np.max(ideal_dB), '--', color='gray', label='Schelkunoff Init')
 
     colors = {'euclidean': 'b', 'phase_only': 'r', 'weighted': 'g'}
 
@@ -53,17 +54,19 @@ def main():
         power_dB = 20 * np.log10(np.abs(F) + 1e-12)
         plt.plot(u, power_dB - np.max(power_dB), color=colors[method], label=f'AP ({method})')
 
-    plt.axhline(20*np.log10(task.sll_ceiling), color='k', linestyle=':', label='SLL Ceiling')
-    plt.axvline(0.5, color='orange', linestyle=':', label='Target')
-    plt.ylim(-40, 5)
+    plt.axvline(0.2, color='orange', linestyle=':', label='Target')
+    for nu in task.null_angles:
+        plt.axvline(nu, color='k', linestyle='-.', label='Null Constraint' if nu == task.null_angles[0] else "")
+
+    plt.ylim(-60, 5)
     plt.xlim(-1, 1)
     plt.xlabel('u = sin(theta)')
     plt.ylabel('Normalized Pattern (dB)')
-    plt.title(f'Pencil Beam (N={N}) Projection Method Comparison')
+    plt.title(f'Nulled Beam (N={N}) Projection Method Comparison')
     plt.legend()
     plt.grid(True)
-    plt.savefig('pencil_beam_result.png')
-    print("Saved plot to pencil_beam_result.png")
+    plt.savefig('nullforming_result.png')
+    print("Saved plot to nullforming_result.png")
 
 if __name__ == '__main__':
     main()

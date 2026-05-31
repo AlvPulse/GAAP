@@ -8,9 +8,10 @@ class ElementData:
         """Returns complex weight c = A * exp(j * phi) for given voltage V."""
         raise NotImplementedError
 
-    def project(self, target_weight):
+    def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         """
-        Returns the best voltage V and achieved weight c that minimizes |c(V) - target_weight|^2.
+        Returns the best voltage V and achieved weight c mapping the target_weight.
+        Supported methods: 'euclidean', 'phase_only', 'weighted'
         """
         raise NotImplementedError
 
@@ -57,13 +58,31 @@ class SyntheticVaractor(ElementData):
     def get_complex_weight(self, V, f=None):
         return self._generate_manifold(np.array(V))
 
-    def project(self, target_weight):
+    def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         """
         Brute-force over voltage grid. Fast and robust to non-monotonic curves.
         Returns (best_V, best_c).
         """
-        # Distances to all points on the grid
-        distances = np.abs(self.c_grid - target_weight)
+        if method == 'euclidean':
+            distances = np.abs(self.c_grid - target_weight)
+        elif method == 'phase_only':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            # Shortest angular distance
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
+        elif method == 'weighted':
+            target_phase = np.angle(target_weight)
+            target_amp = np.abs(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            grid_amp = np.abs(self.c_grid)
+
+            phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
+            amp_diff = np.abs(grid_amp - target_amp)
+            distances = w_phase * phase_diff + w_amp * amp_diff
+        else:
+            raise ValueError(f"Unknown projection method: {method}")
+
         idx = np.argmin(distances)
         return self.V_grid[idx], self.c_grid[idx]
 
@@ -78,7 +97,25 @@ class IdealElement(ElementData):
     def get_complex_weight(self, V, f=None):
         return np.exp(1j * V)
 
-    def project(self, target_weight):
-        distances = np.abs(self.c_grid - target_weight)
+    def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
+        if method == 'euclidean':
+            distances = np.abs(self.c_grid - target_weight)
+        elif method == 'phase_only':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
+        elif method == 'weighted':
+            target_phase = np.angle(target_weight)
+            target_amp = np.abs(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            grid_amp = np.abs(self.c_grid)
+
+            phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
+            amp_diff = np.abs(grid_amp - target_amp)
+            distances = w_phase * phase_diff + w_amp * amp_diff
+        else:
+            raise ValueError(f"Unknown projection method: {method}")
+
         idx = np.argmin(distances)
         return self.V_grid[idx], self.c_grid[idx]
