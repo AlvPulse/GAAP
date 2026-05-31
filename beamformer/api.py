@@ -12,7 +12,7 @@ def beamform(
     element: ElementData,
     N: int,
     initial_delta: float = 0.0,
-    K_max: int = 50,
+    K_max: int = 250,
     debug_dir: str = None,
     **kwargs
 ):

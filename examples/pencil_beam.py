@@ -13,15 +13,15 @@ def main():
     print("Running Pencil Beam Experiment...")
 
     # 1. Setup
-    N = 64
-    task = Task('pencil', target_angles=[0.5], sll_ceiling=0.1) # -20 dB SLL
-    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
+    N = 16
+    task = Task('pencil', target_angles=[0.2,-0.3], sll_ceiling=0.1) # -20 dB SLL
+    element = SyntheticVaractor(beta=0.7, folding=False) # Severe non-linearity
 
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
 
     # 2. Run Geometry-Aware AP
     print(f"Starting AP Optimization... (Debugging output to {debug_dir})")
-    res = beamform(task, element, N=N, K_max=50, debug_dir=debug_dir)
+    res = beamform(task, element, N=N, K_max=550, debug_dir=debug_dir)
 
     # 3. Analyze Results
     print(f"Final Residual: {res['history']['residuals'][-1]:.4f}")
