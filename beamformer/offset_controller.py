@@ -3,94 +3,91 @@ import numpy as np
 class GeometryAwareOffsetController:
     """
     Controls the global phase offset dynamically during the AP iteration based on
-    convergence geometry diagnostics, avoiding direct grid-search optimization.
+    convergence geometry diagnostics.
+    Now correctly tracks Aperture Potential (E_eff), Branch Flips, and Pattern Cost,
+    and uses numerical gradients to find the optimal direction for delta.
     """
     def __init__(self, initial_delta=0.0, use_pattern_cost=False):
         self.delta = initial_delta
         self.use_pattern_cost = use_pattern_cost
 
         # History for diagnostics
-        self.residuals = []
-        self.voltages = None
-        self.deltas = [initial_delta]
+        self.history = {
+            'costs': [],
+            'e_effs': [],
+            'flips': [],
+            'deltas': [initial_delta]
+        }
 
-    def update(self, current_residual, new_voltages, iteration):
-        """
-        State-dependent offset evolution.
-        Returns the new delta and suggested damping factors.
-        """
-        self.residuals.append(current_residual)
+        # State for gradient computation
+        self._perturb_mode = False
+        self._base_delta = initial_delta
+        self._base_cost = None
+        self._base_e_eff = None
+        self._perturb_direction = 1
+        self._perturb_step = 0.05
 
-        # Baseline recommended damping
+    def update(self, current_cost, e_eff, num_flips, iteration):
+        """
+        State-dependent offset evolution using explicit geometry gradients.
+        """
+        self.history['costs'].append(current_cost)
+        self.history['e_effs'].append(e_eff)
+        self.history['flips'].append(num_flips)
+
         tau = 0.7   # Pattern domain damping
         alpha = 0.7 # Hardware domain damping
 
-        if iteration < 2 or self.voltages is None:
-            self.voltages = new_voltages.copy()
+        if iteration < 2:
             return self.delta, tau, alpha
 
-        # Diagnostics
-        # When using pattern cost, current_residual is actually the scalar pattern cost
-        res_change = self.residuals[-1] - self.residuals[-2]
+        # 1. Check if we are in perturb mode to evaluate gradient
+        if self._perturb_mode:
+            # We stepped delta by self._perturb_step * self._perturb_direction.
+            # Did the geometry improve?
 
-        # Branch instability check (voltage jumps)
-        voltage_diffs = np.abs(new_voltages - self.voltages)
-        num_flips = np.sum(voltage_diffs > 3.0) # threshold for a branch flip
+            # Improvement is a combination of lowering cost and raising E_eff
+            cost_improved = current_cost < self._base_cost
+            e_eff_improved = e_eff > self._base_e_eff
 
-        # Oscillation check (residual bouncing)
-        is_oscillating = False
-        if len(self.residuals) >= 3:
-            prev_change = self.residuals[-2] - self.residuals[-3]
-            if res_change * prev_change < 0 and np.abs(res_change) > 1e-3:
-                is_oscillating = True
+            # We require pattern cost to improve or stay roughly the same while E_eff improves
+            if cost_improved or (abs(current_cost - self._base_cost) < 1e-3 and e_eff_improved):
+                # Gradient confirmed! Move in this direction.
+                step = 0.05 * self._perturb_direction
+            else:
+                # Gradient failed. Reverse direction.
+                self._perturb_direction *= -1
+                step = 0.05 * self._perturb_direction
 
-        # Rule 1: Stable convergence
-        if res_change < 0 and num_flips == 0 and not is_oscillating:
-            u_k = 0.0 # No need to move
+            self._perturb_mode = False
+            self.delta = (self._base_delta + step) % (2 * np.pi)
 
-        # Deterministic Geometry Steering
-        # Remove randomness. Rely on physical/geometric indicators.
-        # We will use the history of delta movements to provide momentum.
-        if len(self.deltas) >= 2:
-            last_delta_step = self.deltas[-1] - self.deltas[-2]
-            # Handle wrapping difference
-            last_delta_step = (last_delta_step + np.pi) % (2 * np.pi) - np.pi
         else:
-            last_delta_step = 0.02
+            # 2. We are in standard tracking mode. Check if geometry is stagnating or unstable.
+            cost_change = self.history['costs'][-1] - self.history['costs'][-2]
 
-        # Determine movement direction deterministically
-        direction = np.sign(last_delta_step) if np.abs(last_delta_step) > 1e-5 else 1.0
+            is_oscillating = False
+            if len(self.history['costs']) >= 3:
+                prev_change = self.history['costs'][-2] - self.history['costs'][-3]
+                if cost_change * prev_change < 0 and np.abs(cost_change) > 1e-3:
+                    is_oscillating = True
 
-        # Rule 1: Stable convergence
-        if res_change < 0 and num_flips == 0 and not is_oscillating:
-            u_k = 0.0 # No need to move, just continue AP
+            if is_oscillating or (np.abs(cost_change) < 1e-4 and current_cost > 0.1):
+                # Stagnation or oscillation detected. Initiate a gradient perturb to find a better basin.
+                self._perturb_mode = True
+                self._base_delta = self.delta
+                self._base_cost = current_cost
+                self._base_e_eff = e_eff
 
-        # Rule 2: Oscillation detected
-        elif is_oscillating:
-            # Deterministic small step to break symmetry/oscillation
-            u_k = 0.05 * direction
-            tau *= 0.8
-            alpha *= 0.8
+                # Take a tiny test step
+                self.delta = (self.delta + self._perturb_step * self._perturb_direction) % (2 * np.pi)
+                tau *= 0.8
+                alpha *= 0.8
+            elif num_flips > 2:
+                # High conflict, slow down
+                tau *= 0.5
+                alpha *= 0.5
+                # We don't move delta here, just let the AP settle
 
-        # Rule 3: Branch instability
-        elif num_flips > 2:
-            # High conflict, slow down offset velocity and increase damping
-            # Move slowly away from the instability boundary
-            u_k = 0.01 * direction
-            tau *= 0.5
-            alpha *= 0.5
-
-        # Rule 4: Stagnation
-        elif np.abs(res_change) < 1e-4 and current_residual > 0.1:
-            # Drift deterministically towards lower-conflict regions
-            u_k = 0.02 * direction
-        else:
-            u_k = 0.0 # Default hold
-
-        # Apply update
-        self.delta = (self.delta + u_k) % (2 * np.pi)
-
-        self.voltages = new_voltages.copy()
-        self.deltas.append(self.delta)
-
+        self.history['deltas'].append(self.delta)
         return self.delta, tau, alpha
