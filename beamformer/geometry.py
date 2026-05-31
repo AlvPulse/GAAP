@@ -38,14 +38,31 @@ def scan_offset_feasibility(target_weights: np.ndarray, element: ElementData, n_
         'selected_voltages': branches
     }
 
-def count_branch_flips(voltages_k, voltages_k_minus_1, threshold=5.0):
+def compute_aperture_potential(c_n):
     """
-    Estimates if elements jumped between branches.
-    Since phase wraps and is non-monotonic, a large jump in voltage for a
-    small change in target phase implies a branch flip.
+    E_eff: Returns the average achieved amplitude (0 to 1).
+    A proxy for total array gain capacity given hardware constraints.
     """
-    if voltages_k_minus_1 is None:
+    return np.mean(np.abs(c_n))
+
+def count_branch_flips(c_n_k, c_n_k_minus_1, V_k, V_k_minus_1):
+    """
+    Correctly estimates if elements jumped between physical branches on the manifold.
+    A branch flip occurs when there is a significant jump in control voltage,
+    but the actual achieved phase did NOT change significantly (i.e. the algorithm
+    jumped to an alias phase point on the manifold).
+    """
+    if c_n_k_minus_1 is None or V_k_minus_1 is None:
         return 0
 
-    diffs = np.abs(voltages_k - voltages_k_minus_1)
-    return np.sum(diffs > threshold)
+    voltage_diffs = np.abs(V_k - V_k_minus_1)
+
+    # Calculate shortest angular distance to see if phase remained roughly same
+    phase_k = np.angle(c_n_k)
+    phase_k_minus = np.angle(c_n_k_minus_1)
+    phase_diffs = np.abs(np.angle(np.exp(1j * (phase_k - phase_k_minus))))
+
+    # A branch flip is defined as: large voltage jump (>2.0V) but small phase change (<0.5 rad)
+    # meaning we hit an aliased point.
+    flips = np.sum((voltage_diffs > 2.0) & (phase_diffs < 0.5))
+    return flips

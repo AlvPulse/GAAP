@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import sys
 import os
 sys.path.append('..')
-sys.path.append('..\beamformer')
 
 from beamformer.pattern_projection import Task
 from beamformer.element_model import SyntheticVaractor
@@ -15,8 +14,8 @@ def main():
 
     # 1. Setup
     N = 64
-    task = Task('pencil', target_angles=[0.2,-0.3], sll_ceiling=0.1) # -20 dB SLL
-    element = SyntheticVaractor(beta=0.7, folding=False) # Severe non-linearity
+    task = Task('pencil', target_angles=[0.5], sll_ceiling=0.1) # -20 dB SLL
+    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
 
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
 
