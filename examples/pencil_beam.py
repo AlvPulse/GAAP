@@ -13,7 +13,7 @@ def main():
     print("Running Pencil Beam Experiment...")
 
     # 1. Setup
-    N = 16
+    N = 64
     task = Task('pencil', target_angles=[0.2,-0.3], sll_ceiling=0.1) # -20 dB SLL
     element = SyntheticVaractor(beta=0.7, folding=False) # Severe non-linearity
 
