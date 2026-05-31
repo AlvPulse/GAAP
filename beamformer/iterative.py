@@ -99,7 +99,7 @@ def optimize_beam_ap(
             _, F_ideal = oversampled_fft(initial_weights * np.exp(1j * delta), oversample_factor)
 
         # Stepped pattern update towards ideal shape
-            F_prime = (1 - alpha) * F_prime 
+            F_prime = (1 - alpha) * F_prime + alpha * F_ideal
 
             # Damped update in pattern domain (AP standard damping)
             F_prime_damped = (1 - tau) * F + tau * F_prime
