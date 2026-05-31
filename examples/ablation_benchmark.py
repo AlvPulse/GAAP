@@ -5,7 +5,7 @@ import os
 sys.path.append('..')
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.api import beamform
 from beamformer.utils import oversampled_fft
 
@@ -18,6 +18,7 @@ def run_benchmark_stage(name, task, element, N, **kwargs):
         debug_dir=None,
         use_pattern_cost=True,
         null_init_method='schelkunoff',
+        projection_method='phase_only',
         **kwargs
     )
 
@@ -61,7 +62,12 @@ def main():
 
     N = 64
     task = Task('nulled', target_angles=[0.2], null_angles=[-0.4, 0.5])
-    element = SyntheticVaractor(beta=0.8, folding=True) # High IL, folding
+    if os.path.exists('amplitude.mat') and os.path.exists('phase.mat'):
+        print("Using measured data: amplitude.mat, phase.mat")
+        element = MeasuredVaractor(amp_file='amplitude.mat', phase_file='phase.mat')
+    else:
+        print("Measured files not found. Using SyntheticVaractor fallback.")
+        element = SyntheticVaractor(beta=0.8, folding=True)
 
     results = []
 
@@ -73,7 +79,7 @@ def main():
 
     # Stage 1: AP Only (No Offset Steering)
     results.append(run_benchmark_stage(
-        "Stage 1 (AP Only)   ", task, element, N,
+        "Stage 1 (AP Feasibility)", task, element, N,
         enable_ap=True, enable_offset=False, enable_local_refinement=False
     ))
 
@@ -83,11 +89,17 @@ def main():
         enable_ap=True, enable_offset=True, enable_local_refinement=False
     ))
 
+    # Stage 3: AP + Offset + Refinement
+    results.append(run_benchmark_stage(
+        "Stage 3 (+Refinement)", task, element, N,
+        enable_ap=True, enable_offset=True, enable_local_refinement=True
+    ))
+
     # Print Table
-    print(f"| {'Method':<20} | {'Gain (dB)':<10} | {'Null Depth (dB)':<15} | {'Runtime (s)':<12} | {'Branch Flips':<12} |")
-    print(f"|{'-'*22}|{'-'*12}|{'-'*17}|{'-'*14}|{'-'*14}|")
+    print(f"| {'Method':<25} | {'Gain (dB)':<10} | {'Null Depth (dB)':<15} | {'Runtime (s)':<12} | {'Branch Flips':<12} |")
+    print(f"|{'-'*27}|{'-'*12}|{'-'*17}|{'-'*14}|{'-'*14}|")
     for r in results:
-        print(f"| {r['name']:<20} | {r['gain']:>10.2f} | {r['null']:>15.2f} | {r['runtime']:>12.4f} | {r['flips']:>12} |")
+        print(f"| {r['name']:<25} | {r['gain']:>10.2f} | {r['null']:>15.2f} | {r['runtime']:>12.4f} | {r['flips']:>12} |")
 
     print("---------------------------------------------------------")
 

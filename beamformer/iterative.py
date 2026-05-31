@@ -4,7 +4,6 @@ from typing import Tuple, Optional
 from .utils import oversampled_fft, oversampled_ifft
 from .pattern_projection import pattern_project, Task
 from .element_model import ElementData
-from .offset_controller import GeometryAwareOffsetController
 from .debug_utils import DebugLogger
 from .cost_functions import evaluate_pattern_cost
 
@@ -23,7 +22,6 @@ def optimize_beam_ap(
     w_phase: float = 1.0,
     w_amp: float = 0.5,
     enable_ap: bool = True,
-    enable_offset: bool = True,
     enable_local_refinement: bool = False,
     **kwargs
 ) -> Tuple[np.ndarray, float, np.ndarray, dict]:
@@ -40,7 +38,6 @@ def optimize_beam_ap(
     # Init
     c_n = initial_weights.copy()
     delta = initial_delta
-    controller = GeometryAwareOffsetController(initial_delta=delta, use_pattern_cost=use_pattern_cost)
 
     V_n = np.zeros(N)
 
@@ -112,43 +109,33 @@ def optimize_beam_ap(
             V_cand[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
             current_residual += np.abs(rotated_cand[n] - c_proj[n])**2
 
-        # 3. Local Refinement (Architectural Hook)
-        if enable_local_refinement:
-            from .local_refinement import refine_local_active_set
-            # We would initialize and pass af_cache here, but for now we just pass None
-            # until we fully implement the inner loop in later stages.
-            V_cand = refine_local_active_set(V_cand, task, element, af_cache=None)
+        # Damping is static since delta is fixed in Stage 0
 
-        # 4. Geometry-Aware Offset Control
-        # Calculate actual geometry metrics
-        e_eff = compute_aperture_potential(c_n)
-
-        # Calculate branch flips between last step and candidate
-        prev_V = history['voltages'][-1] if len(history['voltages']) > 0 else V_n
-        prev_c = history['weights'][-1] if len(history['deltas']) > 0 else c_n
-        num_flips = count_branch_flips(c_proj, prev_c, V_cand, prev_V)
-
-        current_pattern_cost = evaluate_pattern_cost(c_n, task, oversample_factor)
-
-        metric_for_controller = current_pattern_cost if use_pattern_cost else current_residual
-
-        # Update offset controller (it now expects cost, e_eff, flips)
-        delta_new, suggested_tau, suggested_alpha = controller.update(
-            metric_for_controller, e_eff, num_flips, k
-        )
-
-        if enable_offset:
-            delta = delta_new
-            tau = suggested_tau
-            alpha = suggested_alpha
-
-        # 5. Damping / Stabilization
+        # 3. Damping / Stabilization
         # Damped update in hardware domain to stabilize branch jumps
         V_n = (1 - alpha) * V_n + alpha * V_cand
 
-        # Final c_n evaluated at new voltages
+        # Final c_n evaluated at new voltages BEFORE local refinement
         for n in range(N):
             c_n[n] = element.get_complex_weight(V_n[n])
+
+        # Evaluate current cost *before* checking tracking, and *before* refinement
+        # (or after refinement depending on what we want to track as best, but typically we want the refined pattern)
+        # We will do refinement next, so we update c_n again if refinement happens.
+
+        # 4. Local Refinement (Architectural Hook)
+        # Run AFTER AP projection and damping so we don't destroy the local repairs
+        # by immediately hitting them with the Euclidean AP constraint in the same step.
+        if enable_local_refinement:
+            from .local_refinement import refine_local_active_set
+            # We would initialize and pass af_cache here, but for now we just pass None
+            V_n = refine_local_active_set(V_n, task, element, af_cache=None)
+
+            # Re-evaluate c_n after refinement
+            for n in range(N):
+                c_n[n] = element.get_complex_weight(V_n[n])
+
+        current_pattern_cost = evaluate_pattern_cost(c_n, task, oversample_factor)
 
         # 5. Tracking and stopping criteria
         # Store tracking info

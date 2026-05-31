@@ -55,28 +55,35 @@ def beamform(
     else:
         raise ValueError(f"Unknown task type: {task.type}")
 
-    # Calculate optimal non-projection baseline
+    # Stage 0: Geometry Selection
+    if enable_offset:
+        from .geometry_selection import select_optimal_geometry
+        selected_delta = select_optimal_geometry(
+            initial_weights, element, N,
+            projection_method=projection_method
+        )
+    else:
+        selected_delta = initial_delta
+
+    # Calculate optimal non-projection baseline for reference
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(
         initial_weights, element,
         projection_method=projection_method, w_phase=w_phase, w_amp=w_amp
     )
 
-    # 2. Iterate
-    use_pattern_cost = kwargs.pop('use_pattern_cost', False)
+    # Stage 1 & 2: Iterate AP Feasibility and Local Refinement
     V_n, final_delta, c_n, history = optimize_beam_ap(
         task=task,
         element=element,
         N=N,
         initial_weights=initial_weights,
-        initial_delta=initial_delta,
+        initial_delta=selected_delta, # Now we use the fixed selected delta
         K_max=K_max,
         debug_dir=debug_dir,
-        use_pattern_cost=use_pattern_cost,
         projection_method=projection_method,
         w_phase=w_phase,
         w_amp=w_amp,
         enable_ap=enable_ap,
-        enable_offset=enable_offset,
         enable_local_refinement=enable_local_refinement,
         baseline_weights=baseline_c_n,
         **kwargs
