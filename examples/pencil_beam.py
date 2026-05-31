@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import sys
 import os
 sys.path.append('..')
+sys.path.append('..\beamformer')
 
 from beamformer.pattern_projection import Task
 from beamformer.element_model import SyntheticVaractor
