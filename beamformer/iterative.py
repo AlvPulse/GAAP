@@ -91,14 +91,6 @@ def optimize_beam_ap(
             # Project pattern (enforcing task constraints like SLL and nulls)
             F_prime = pattern_project(F, u_grid, task, N)
 
-            # We apply the alpha step in the pattern domain: we blend the ideal pattern
-            # with the current pattern to stay closer to the ideal shape instead of wildly projecting.
-            # Create ideal pattern for reference
-            _, F_ideal = oversampled_fft(initial_weights * np.exp(1j * delta), oversample_factor)
-
-        # Stepped pattern update towards ideal shape
-            F_prime = (1 - alpha) * F_prime + alpha * F_ideal
-
             # Damped update in pattern domain (AP standard damping)
             F_prime_damped = (1 - tau) * F + tau * F_prime
 
