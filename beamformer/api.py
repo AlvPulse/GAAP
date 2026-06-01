@@ -65,6 +65,19 @@ def beamform(
     else:
         selected_delta = initial_delta
 
+    # SOTA Baselines Intercept
+    solver = kwargs.get('solver', 'ap')
+
+    if solver == 'pgd':
+        from .sota_solvers import solve_pgd
+        V_n, c_n = solve_pgd(task, element, N, initial_weights)
+        return {'voltages': V_n, 'weights': c_n, 'initial_weights': initial_weights, 'history': {'residuals': []}}
+
+    elif solver == 'omp':
+        from .sota_solvers import solve_omp_inspired
+        V_n, c_n = solve_omp_inspired(task, element, N, initial_weights)
+        return {'voltages': V_n, 'weights': c_n, 'initial_weights': initial_weights, 'history': {'residuals': []}}
+
     # Calculate optimal non-projection baseline for reference
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(
         initial_weights, element,

@@ -123,21 +123,9 @@ def optimize_beam_ap(
         # (or after refinement depending on what we want to track as best, but typically we want the refined pattern)
         # We will do refinement next, so we update c_n again if refinement happens.
 
-        # 4. Local Refinement (Architectural Hook)
-        # Run AFTER AP projection and damping so we don't destroy the local repairs
-        # by immediately hitting them with the Euclidean AP constraint in the same step.
-        if enable_local_refinement:
-            from .local_refinement import refine_local_active_set
-            # We would initialize and pass af_cache here, but for now we just pass None
-            V_n = refine_local_active_set(V_n, task, element, af_cache=None)
-
-            # Re-evaluate c_n after refinement
-            for n in range(N):
-                c_n[n] = element.get_complex_weight(V_n[n])
-
         current_pattern_cost = evaluate_pattern_cost(c_n, task, oversample_factor)
 
-        # 5. Tracking and stopping criteria
+        # 4. Tracking and stopping criteria
         # Store tracking info
         history['residuals'].append(current_residual)
         history['deltas'].append(delta)
@@ -167,6 +155,21 @@ def optimize_beam_ap(
             volt_change = np.max(np.abs(history['voltages'][-1] - history['voltages'][-2]))
             if volt_change < tol and current_residual < tol:
                 break
+
+    # STAGE 2: Local Refinement (Moved outside AP loop to ensure it acts as the final cleanup step)
+    if enable_local_refinement:
+        from .local_refinement import refine_local_active_set
+        from .incremental_af import IncrementalAFCache
+
+        # Initialize the O(K) array factor tracker for fast local evaluations
+        af_cache = IncrementalAFCache(N, task)
+        af_cache.initialize(best_c_n)
+
+        best_V_n = refine_local_active_set(best_V_n, task, element, af_cache=af_cache)
+
+        # Re-evaluate c_n after refinement
+        for n in range(N):
+            best_c_n[n] = element.get_complex_weight(best_V_n[n])
 
     if logger:
         logger.generate_report()

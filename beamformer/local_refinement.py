@@ -49,35 +49,54 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
             v_minus = np.clip(v_curr - step_size, element.v_min, element.v_max)
             c_minus = element.get_complex_weight(v_minus)
 
-            # Simple greedy evaluation of null depth
-            # (In a fully cached implementation, we'd use af_cache here.
-            # For robustness and since N is small enough, we do a quick local eval)
+            if af_cache is not None:
+                # O(K) Incremental Cache evaluation
+                def evaluate_incremental(c_test):
+                    af_cache.update(idx, c_test)
+                    angles, af_vals = af_cache.get_af()
+                    cost = 0.0
+                    for nu in task.null_angles:
+                        angle_idx = np.argmin(np.abs(angles - nu))
+                        cost += np.abs(af_vals[angle_idx])
+                    # Revert cache state
+                    af_cache.update(idx, c_n[idx])
+                    return cost
 
-            def evaluate_nulls(c_cand_array):
-                cost = 0.0
-                for nu in task.null_angles:
-                    sv = get_steering_vector(len(V_refined), nu)
-                    null_power = np.abs(np.sum(c_cand_array * np.conj(sv)))
-                    cost += null_power
-                return cost
+                cost_curr = evaluate_incremental(c_n[idx])
+                cost_plus = evaluate_incremental(c_plus)
+                cost_minus = evaluate_incremental(c_minus)
 
-            c_test_curr = c_n.copy()
-            cost_curr = evaluate_nulls(c_test_curr)
+            else:
+                # Fallback brute-force evaluation O(N)
+                def evaluate_nulls(c_cand_array):
+                    cost = 0.0
+                    for nu in task.null_angles:
+                        sv = get_steering_vector(len(V_refined), nu)
+                        null_power = np.abs(np.sum(c_cand_array * np.conj(sv)))
+                        cost += null_power
+                    return cost
 
-            c_test_plus = c_n.copy()
-            c_test_plus[idx] = c_plus
-            cost_plus = evaluate_nulls(c_test_plus)
+                c_test_curr = c_n.copy()
+                cost_curr = evaluate_nulls(c_test_curr)
 
-            c_test_minus = c_n.copy()
-            c_test_minus[idx] = c_minus
-            cost_minus = evaluate_nulls(c_test_minus)
+                c_test_plus = c_n.copy()
+                c_test_plus[idx] = c_plus
+                cost_plus = evaluate_nulls(c_test_plus)
+
+                c_test_minus = c_n.copy()
+                c_test_minus[idx] = c_minus
+                cost_minus = evaluate_nulls(c_test_minus)
 
             # Pick best
             if cost_plus < cost_curr and cost_plus < cost_minus:
                 V_refined[idx] = v_plus
+                if af_cache is not None:
+                    af_cache.update(idx, c_plus)
                 c_n[idx] = c_plus
             elif cost_minus < cost_curr and cost_minus < cost_plus:
                 V_refined[idx] = v_minus
+                if af_cache is not None:
+                    af_cache.update(idx, c_minus)
                 c_n[idx] = c_minus
 
     return V_refined
