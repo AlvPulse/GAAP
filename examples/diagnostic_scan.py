@@ -25,7 +25,7 @@ def main():
         element = MeasuredVaractor(amp_file='amplitude.mat', phase_file='phase.mat')
     else:
         print("Measured files not found. Using SyntheticVaractor fallback.")
-        element = SyntheticVaractor(beta=0.9, folding=False)
+        element = SyntheticVaractor(beta=0.8, folding=True)
 
     # Initial Ideal Weights for Nulling
     initial_weights = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)

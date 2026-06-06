@@ -165,7 +165,20 @@ def optimize_beam_ap(
         af_cache = IncrementalAFCache(N, task)
         af_cache.initialize(best_c_n)
 
-        best_V_n = refine_local_active_set(best_V_n, task, element, af_cache=af_cache)
+        # Extract hyperparameters
+        k_active = kwargs.get('k_active', 8)
+        refinement_steps = kwargs.get('refinement_steps', 10)
+        step_size = kwargs.get('step_size', 0.05)
+
+        best_V_n = refine_local_active_set(
+            best_V_n,
+            task,
+            element,
+            af_cache=af_cache,
+            k_active=k_active,
+            refinement_steps=refinement_steps,
+            step_size=step_size
+        )
 
         # Re-evaluate c_n after refinement
         for n in range(N):

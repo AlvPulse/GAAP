@@ -50,14 +50,43 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
             c_minus = element.get_complex_weight(v_minus)
 
             if af_cache is not None:
+                # Get baseline peak power for 3dB drop check
+                angles, af_vals_base = af_cache.get_af()
+                baseline_peak_power = 0.0
+                if task.target_angles:
+                    for t in task.target_angles:
+                        t_idx = np.argmin(np.abs(angles - t))
+                        baseline_peak_power += np.abs(af_vals_base[t_idx])**2
+
                 # O(K) Incremental Cache evaluation
                 def evaluate_incremental(c_test):
                     af_cache.update(idx, c_test)
                     angles, af_vals = af_cache.get_af()
-                    cost = 0.0
+
+                    # 1. Null Power
+                    null_power = 0.0
                     for nu in task.null_angles:
                         angle_idx = np.argmin(np.abs(angles - nu))
-                        cost += np.abs(af_vals[angle_idx])
+                        null_power += np.abs(af_vals[angle_idx])**2
+
+                    # 2. Peak Power
+                    peak_power = 0.0
+                    if task.target_angles:
+                        for t in task.target_angles:
+                            t_idx = np.argmin(np.abs(angles - t))
+                            peak_power += np.abs(af_vals[t_idx])**2
+                    else:
+                        peak_power = 1.0 # fallback
+
+                    # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
+                    # Use a small epsilon to avoid division by zero
+                    ptnr = peak_power / (null_power + 1e-10)
+                    cost = -ptnr # Negative because we minimize cost
+
+                    # 4. Gain Penalty (Penalize heavily if peak drops by > 3dB from baseline)
+                    if peak_power < 0.5 * baseline_peak_power:
+                        cost += 1e6 # severe penalty
+
                     # Revert cache state
                     af_cache.update(idx, c_n[idx])
                     return cost
@@ -68,24 +97,46 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
 
             else:
                 # Fallback brute-force evaluation O(N)
-                def evaluate_nulls(c_cand_array):
-                    cost = 0.0
+
+                # Baseline peak
+                baseline_peak_power = 0.0
+                if task.target_angles:
+                    for t in task.target_angles:
+                        sv = get_steering_vector(len(V_refined), t)
+                        baseline_peak_power += np.abs(np.sum(c_n * np.conj(sv)))**2
+
+                def evaluate_metrics(c_cand_array):
+                    null_power = 0.0
                     for nu in task.null_angles:
                         sv = get_steering_vector(len(V_refined), nu)
-                        null_power = np.abs(np.sum(c_cand_array * np.conj(sv)))
-                        cost += null_power
+                        null_power += np.abs(np.sum(c_cand_array * np.conj(sv)))**2
+
+                    peak_power = 0.0
+                    if task.target_angles:
+                        for t in task.target_angles:
+                            sv = get_steering_vector(len(V_refined), t)
+                            peak_power += np.abs(np.sum(c_cand_array * np.conj(sv)))**2
+                    else:
+                        peak_power = 1.0
+
+                    ptnr = peak_power / (null_power + 1e-10)
+                    cost = -ptnr
+
+                    if peak_power < 0.5 * baseline_peak_power:
+                        cost += 1e6
+
                     return cost
 
                 c_test_curr = c_n.copy()
-                cost_curr = evaluate_nulls(c_test_curr)
+                cost_curr = evaluate_metrics(c_test_curr)
 
                 c_test_plus = c_n.copy()
                 c_test_plus[idx] = c_plus
-                cost_plus = evaluate_nulls(c_test_plus)
+                cost_plus = evaluate_metrics(c_test_plus)
 
                 c_test_minus = c_n.copy()
                 c_test_minus[idx] = c_minus
-                cost_minus = evaluate_nulls(c_test_minus)
+                cost_minus = evaluate_metrics(c_test_minus)
 
             # Pick best
             if cost_plus < cost_curr and cost_plus < cost_minus:
