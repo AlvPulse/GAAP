@@ -15,7 +15,7 @@ def main():
     # 1. Setup
     N = 64
     task = Task('pencil', target_angles=[0.5], sll_ceiling=0.1) # -20 dB SLL
-    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
+    element = SyntheticVaractor(beta=0.85, folding=False) # Severe non-linearity
 
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results')
 

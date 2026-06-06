@@ -60,8 +60,8 @@ def main():
     print("---------------------------------------------------------")
 
     N = 64
-    task = Task('nulled', target_angles=[0.2], null_angles=[-0.4, 0.5])
-    element = SyntheticVaractor(beta=0.8, folding=True) # High IL, folding
+    task = Task('nulled', target_angles=[0.2], null_angles=[-0.2, 0.4])
+    element = SyntheticVaractor(beta=0.85, folding=False) # High IL, folding
 
     results = []
 
