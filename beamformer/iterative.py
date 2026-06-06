@@ -115,13 +115,36 @@ def optimize_beam_ap(
         # Damped update in hardware domain to stabilize branch jumps
         V_n = (1 - alpha) * V_n + alpha * V_cand
 
-        # Final c_n evaluated at new voltages BEFORE local refinement
+        # INNER LOOP: Local Refinement inside AP
+        # We perform local refinement iteratively during the AP run, ensuring we refine
+        # the weights obtained in the current geometry basin BEFORE calculating the cost.
+        if enable_local_refinement:
+            from .local_refinement import refine_local_active_set
+            from .incremental_af import IncrementalAFCache
+
+            # Temporary re-evaluation for baseline
+            for n in range(N):
+                c_n[n] = element.get_complex_weight(V_n[n])
+
+            af_cache = IncrementalAFCache(N, task)
+            af_cache.initialize(c_n)
+
+            # Use current dynamic step size if tracked
+            current_step_size = kwargs.get('current_step_size', kwargs.get('step_size', 0.05))
+
+            V_n = refine_local_active_set(
+                V_n,
+                task,
+                element,
+                af_cache=af_cache,
+                k_active=kwargs.get('k_active', 8),
+                refinement_steps=kwargs.get('refinement_steps_inner', 3),
+                step_size=current_step_size
+            )
+
+        # Final c_n evaluated at new voltages
         for n in range(N):
             c_n[n] = element.get_complex_weight(V_n[n])
-
-        # Evaluate current cost *before* checking tracking, and *before* refinement
-        # (or after refinement depending on what we want to track as best, but typically we want the refined pattern)
-        # We will do refinement next, so we update c_n again if refinement happens.
 
         current_pattern_cost = evaluate_pattern_cost(c_n, task, oversample_factor)
 
@@ -131,7 +154,6 @@ def optimize_beam_ap(
         history['deltas'].append(delta)
         history['voltages'].append(V_n.copy())
 
-        # NOTE: We need history to store 'weights' because we use it for branch flips
         if 'weights' not in history:
             history['weights'] = []
         history['weights'].append(c_n.copy())
@@ -142,7 +164,6 @@ def optimize_beam_ap(
         if logger:
             logger.log_iteration(delta, current_residual, c_n, V_n)
 
-        # Track the best actual geometry/pattern quality, not just the lowest projection mismatch
         metric_to_track = current_pattern_cost if use_pattern_cost else current_residual
         if metric_to_track < best_metric:
             best_metric = metric_to_track
@@ -150,37 +171,73 @@ def optimize_beam_ap(
             best_delta = delta
             best_c_n = c_n.copy()
 
-        # Convergence check
+        # Convergence check & Event-Triggered Basin Reselection
         if k > 0:
             volt_change = np.max(np.abs(history['voltages'][-1] - history['voltages'][-2]))
-            if volt_change < tol and current_residual < tol:
+
+            # Stagnation detection
+            stagnated = volt_change < 1e-3 and abs(history['residuals'][-1] - history['residuals'][-2]) < 1e-3
+
+            if stagnated:
+                if kwargs.get('enable_event_triggered_offset', False):
+                    from .event_triggered_offset import trigger_basin_reselection
+
+                    new_delta, new_V_n, new_c_n, changed = trigger_basin_reselection(
+                        task, element, N, c_n, delta, current_pattern_cost,
+                        n_candidates=kwargs.get('basin_candidates', 8),
+                        probe_lr_steps=kwargs.get('probe_lr_steps', 3),
+                        k_active=kwargs.get('k_active', 8),
+                        step_size=kwargs.get('step_size', 0.05),
+                        projection_method=projection_method,
+                        w_phase=w_phase,
+                        w_amp=w_amp
+                    )
+
+                    if changed:
+                        delta = new_delta
+                        V_n = new_V_n
+                        c_n = new_c_n
+
+                        # Reset adaptive step size globally
+                        if 'current_step_size' in kwargs:
+                            kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+
+                elif kwargs.get('enable_random_hopping', False):
+                    # Random basin hopping fallback
+                    new_delta = np.random.uniform(0, 2 * np.pi)
+
+                    # Project directly without probe
+                    rotated_cand = c_n * np.exp(1j * new_delta)
+                    for n in range(N):
+                        V_n[n], c_n[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+                    delta = new_delta
+
+                    if 'current_step_size' in kwargs:
+                        kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+
+
+            if volt_change < tol and current_residual < tol and not stagnated:
+                # Only break if we didn't just hop
                 break
 
-    # STAGE 2: Local Refinement (Moved outside AP loop to ensure it acts as the final cleanup step)
-    if enable_local_refinement:
+    # STAGE 2: Local Refinement (Final Cleanup)
+    if enable_local_refinement and kwargs.get('final_cleanup', True):
         from .local_refinement import refine_local_active_set
         from .incremental_af import IncrementalAFCache
 
-        # Initialize the O(K) array factor tracker for fast local evaluations
         af_cache = IncrementalAFCache(N, task)
         af_cache.initialize(best_c_n)
-
-        # Extract hyperparameters
-        k_active = kwargs.get('k_active', 8)
-        refinement_steps = kwargs.get('refinement_steps', 10)
-        step_size = kwargs.get('step_size', 0.05)
 
         best_V_n = refine_local_active_set(
             best_V_n,
             task,
             element,
             af_cache=af_cache,
-            k_active=k_active,
-            refinement_steps=refinement_steps,
-            step_size=step_size
+            k_active=kwargs.get('k_active', 8),
+            refinement_steps=kwargs.get('refinement_steps', 10),
+            step_size=kwargs.get('step_size', 0.05)
         )
 
-        # Re-evaluate c_n after refinement
         for n in range(N):
             best_c_n[n] = element.get_complex_weight(best_V_n[n])
 

@@ -3,7 +3,7 @@ import numpy as np
 from .geometry import compute_local_mobility
 from .synthesis import get_steering_vector
 
-def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinement_steps=10, step_size=0.05):
+def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinement_steps=10, step_size=0.05, adaptive_decay=0.9):
     """
     Stage 2: Geometry-Aware Local Refinement.
     Selects the most "mobile" elements (high M_n) and performs small manifold-tangent
@@ -15,6 +15,8 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
         element: The hardware manifold data.
         af_cache: The IncrementalAFCache maintaining the array factor at sparse angles.
         k_active: Number of elements to include in the active set.
+        step_size: Initial step size for voltage perturbation.
+        adaptive_decay: Decay factor for step size upon success.
 
     Returns:
         V_refined: Array of N refined voltages.
@@ -36,17 +38,20 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
     for n in range(len(V_refined)):
         c_n[n] = element.get_complex_weight(V_refined[n])
 
+    current_step_sizes = np.ones(len(V_refined)) * step_size
+
     # We will perturb voltages in the active set using a greedy approach
     for step in range(refinement_steps):
         for idx in active_set:
             v_curr = V_refined[idx]
+            current_step = current_step_sizes[idx]
 
             # Evaluate +step
-            v_plus = np.clip(v_curr + step_size, element.v_min, element.v_max)
+            v_plus = np.clip(v_curr + current_step, element.v_min, element.v_max)
             c_plus = element.get_complex_weight(v_plus)
 
             # Evaluate -step
-            v_minus = np.clip(v_curr - step_size, element.v_min, element.v_max)
+            v_minus = np.clip(v_curr - current_step, element.v_min, element.v_max)
             c_minus = element.get_complex_weight(v_minus)
 
             if af_cache is not None:
@@ -144,10 +149,15 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
                 if af_cache is not None:
                     af_cache.update(idx, c_plus)
                 c_n[idx] = c_plus
+                current_step_sizes[idx] *= adaptive_decay # Optional: decay step size on success or just keep it
             elif cost_minus < cost_curr and cost_minus < cost_plus:
                 V_refined[idx] = v_minus
                 if af_cache is not None:
                     af_cache.update(idx, c_minus)
                 c_n[idx] = c_minus
+                current_step_sizes[idx] *= adaptive_decay
+            else:
+                # If neither step improved, reduce the step size for next time
+                current_step_sizes[idx] *= 0.5
 
     return V_refined
