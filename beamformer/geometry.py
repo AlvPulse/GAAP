@@ -45,6 +45,49 @@ def compute_aperture_potential(c_n):
     """
     return np.mean(np.abs(c_n))
 
+def compute_local_mobility(V_n, element: ElementData, epsilon=1e-3, dV=0.01):
+    """
+    Computes local controllability/mobility metric M_n for each element based on its voltage.
+    M_n = 1 / (epsilon + |dA/d_phi|)
+
+    A high mobility means we can adjust phase locally without severely dropping amplitude.
+    """
+    N = len(V_n)
+    M_n = np.zeros(N)
+
+    v_max = getattr(element, 'v_max', 2*np.pi)
+    v_min = getattr(element, 'v_min', 0.0)
+
+    for i, v in enumerate(V_n):
+        # Finite difference approx
+        v_plus = np.clip(v + dV, v_min, v_max)
+        v_minus = np.clip(v - dV, v_min, v_max)
+
+        c_plus = element.get_complex_weight(v_plus)
+        c_minus = element.get_complex_weight(v_minus)
+
+        dA = np.abs(c_plus) - np.abs(c_minus)
+
+        # Unwrap phase difference
+        d_phi = np.angle(np.exp(1j * (np.angle(c_plus) - np.angle(c_minus))))
+
+        if np.abs(d_phi) < 1e-6:
+            # If phase isn't changing locally, it's highly "immobile" for phase adjustments
+            # We penalize this heavily because we can't use this element for null steering
+            M_n[i] = 0.0
+        else:
+            deriv = np.abs(dA / d_phi)
+            M_n[i] = 1.0 / (epsilon + deriv)
+
+    return M_n
+
+def compute_array_controllability(V_n, element: ElementData):
+    """
+    C: Returns the average local mobility metric across the array.
+    """
+    M_n = compute_local_mobility(V_n, element)
+    return np.mean(M_n)
+
 def count_branch_flips(c_n_k, c_n_k_minus_1, V_k, V_k_minus_1):
     """
     Correctly estimates if elements jumped between physical branches on the manifold.
