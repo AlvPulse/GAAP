@@ -176,7 +176,14 @@ def optimize_beam_ap(
             volt_change = np.max(np.abs(history['voltages'][-1] - history['voltages'][-2]))
 
             # Stagnation detection
-            stagnated = volt_change < 1e-3 and abs(history['residuals'][-1] - history['residuals'][-2]) < 1e-3
+            # We relax the stagnation condition to catch slow oscillations or very slow progress
+            stagnated = volt_change < 5e-2 and abs(history['residuals'][-1] - history['residuals'][-2]) < 5e-2
+
+            # Additional heuristic: If it's been a while (e.g. 10 iterations) and no major progress is made
+            if k >= 5:
+                recent_res_change = abs(history['residuals'][-1] - history['residuals'][-5])
+                if recent_res_change < 1e-2:
+                    stagnated = True
 
             if stagnated:
                 if kwargs.get('enable_event_triggered_offset', False):
