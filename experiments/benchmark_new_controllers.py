@@ -12,10 +12,10 @@ from beamformer.api import beamform
 
 def run_benchmark():
     N = 64
-    element = SyntheticVaractor(beta=1.5, folding=True)
+    element = SyntheticVaractor(beta=0.9, folding=False)
 
     # Pathological steer with nulls
-    task = Task(type='nulled', target_angles=[0.4], null_angles=[-0.3, 0.2, 0.6], sll_ceiling=0.1)
+    task = Task(type='nulled', target_angles=[0.4, 0.7], null_angles=[-0.4, 0.3, 0.5], sll_ceiling=0.1)
 
     K_max = 80
 

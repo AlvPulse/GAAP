@@ -12,10 +12,10 @@ from beamformer.api import beamform
 
 def run_benchmark():
     N = 64
-    element = SyntheticVaractor(beta=1.5, folding=True)
+    element = SyntheticVaractor(beta=0.8, folding=False)
 
     # Pathological steer with nulls
-    task = Task(type='nulled', target_angles=[0.4], null_angles=[-0.3, 0.2, 0.6], sll_ceiling=0.1)
+    task = Task(type='nulled', target_angles=[0.4], null_angles=[-0.3, 0.2, 0.5], sll_ceiling=0.1)
 
     K_max = 50
 
@@ -71,6 +71,9 @@ def run_benchmark():
     plt.grid(True)
     plt.savefig('experiments/event_triggered_convergence.png')
     print("Saved convergence plot to experiments/event_triggered_convergence.png")
+    print(res_event['history']['residuals'],"event")
+    print(res_random['history']['residuals'],"random")
+    print(res_baseline['history']['residuals'],"baseline")
 
 if __name__ == '__main__':
     run_benchmark()

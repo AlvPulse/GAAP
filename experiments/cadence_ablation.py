@@ -126,7 +126,7 @@ def run_cadence_ablation(schedule, task, element, N, initial_weights):
             # Well, schedule handles it.
             V_n = refine_local_active_set(
                 V_n, task, element, af_cache,
-                k_active=8, refinement_steps=refine_steps, step_size=0.05
+                k_active=16, refinement_steps=refine_steps, step_size=0.05
             )
             for n in range(N):
                 c_n[n] = element.get_complex_weight(V_n[n])
@@ -233,7 +233,7 @@ def main():
     schedules = [
         {
             'name': '1_Refinement_Only_After_WarmStart',
-            'total_iterations': 30,
+            'total_iterations': 100,
             'offset_every': 100,  # Never triggers after 0
             'ap_every': 100,      # Never triggers after 0
             'refine_every': 1,
@@ -241,7 +241,7 @@ def main():
         },
         {
             'name': '2_AP_Every_Iteration',
-            'total_iterations': 30,
+            'total_iterations': 100,
             'offset_every': 100,
             'ap_every': 1,
             'refine_every': 1,
@@ -249,25 +249,33 @@ def main():
         },
         {
             'name': '3_Offset_Every_Iteration',
-            'total_iterations': 30,
+            'total_iterations': 100,
             'offset_every': 1,
-            'ap_every': 5,
+            'ap_every': 1,
             'refine_every': 1,
             'refine_steps': 5
         },
         {
             'name': '4_Slow_Higher_Levels',
-            'total_iterations': 30,
-            'offset_every': 20,
+            'total_iterations': 100,
+            'offset_every': 10,
             'ap_every': 5,
             'refine_every': 1,
             'refine_steps': 5
         },
         {
-            'name': '5_Fixed_Offset_Baseline',
-            'total_iterations': 30,
+            'name': '5_Fixed_Offset_Baseline+slower AP(5)',
+            'total_iterations': 100,
             'offset_every': 0,
-            'ap_every': 2,
+            'ap_every': 5,
+            'refine_every': 1,
+            'refine_steps': 5
+        },
+        {
+            'name': '6_offset_only',
+            'total_iterations': 100,
+            'offset_every': 1,
+            'ap_every': 0,
             'refine_every': 1,
             'refine_steps': 5
         }

@@ -106,7 +106,7 @@ def main():
         null_init_method='lms',
         k_active=16,          # Expose this if needed, or rely on default
         refinement_steps=20,
-        step_size=0.05
+        step_size=0.01
     )
 
     V_ref = res_ref['voltages']

@@ -37,7 +37,7 @@ def evaluate_metrics(c_n, task):
 
 def main():
     print("Starting Local Refinement Hyperparameter Tuning...")
-    N = 64
+    N = 128
     element = SyntheticVaractor()
     task = Task(type='nulled', target_angles=[0.0], null_angles=[0.4])
 
@@ -49,7 +49,7 @@ def main():
         enable_offset=True,
         enable_ap=True,
         enable_local_refinement=False,
-        K_max=50,
+        K_max=30,
         null_init_method='lms'
     )
 
@@ -59,9 +59,9 @@ def main():
     print(f"Base (AP Only) - Peak: {peak_base:.2f} dB, Null: {null_base:.2f} dB, PTNR: {ptnr_base:.2f} dB")
 
     # Grid search parameters
-    k_actives = [4, 8, 16, 32]
-    refinement_steps_list = [5, 10, 20]
-    step_sizes = [0.01, 0.05, 0.1]
+    k_actives = [4, 8, 16, 32, 64]
+    refinement_steps_list = [5, 10, 20, 30]
+    step_sizes = [0.01, 0.05, 0.1, 0.2]
 
     results = []
 
