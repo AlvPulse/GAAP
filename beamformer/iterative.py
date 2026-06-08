@@ -41,6 +41,14 @@ def optimize_beam_ap(
 
     V_n = np.zeros(N)
 
+    # Init controllers
+    mab_controller = None
+    if kwargs.get('enable_mab_hopping', False):
+        from .mab_controller import UCBPhaseController
+        mab_controller = UCBPhaseController(n_arms=kwargs.get('mab_arms', 16), exploration_weight=kwargs.get('mab_exploration', 2.0))
+
+    current_sa_cost = float('inf')
+
     # Determine optional baseline if provided for debug
     baseline_weights = kwargs.get('baseline_weights', None)
 
@@ -114,6 +122,9 @@ def optimize_beam_ap(
         # 3. Damping / Stabilization
         # Damped update in hardware domain to stabilize branch jumps
         V_n = (1 - alpha) * V_n + alpha * V_cand
+
+        if current_sa_cost == float('inf'):
+            current_sa_cost = current_residual
 
         # INNER LOOP: Local Refinement inside AP
         # We perform local refinement iteratively during the AP run, ensuring we refine
@@ -197,6 +208,46 @@ def optimize_beam_ap(
             # To avoid rapid hopping, require a minimum number of iterations in the current basin
             min_basin_iters = kwargs.get('min_basin_iters', 3)
             iters_in_basin = k - kwargs.get('last_hop_k', 0)
+            if mab_controller is not None:
+                # Update bandit with current cost
+                current_arm = int((delta / (2*np.pi)) * mab_controller.n_arms) % mab_controller.n_arms
+                mab_controller.update(current_arm, current_pattern_cost if use_pattern_cost else current_residual)
+
+                # We hop based on bandit only when stagnated to allow local settling
+                if stagnated and iters_in_basin >= min_basin_iters:
+                    next_arm = mab_controller.select_arm()
+                    if next_arm != current_arm:
+                        new_delta = mab_controller.get_delta_for_arm(next_arm)
+                        # Add a tiny bit of jitter to not hit the exact same point
+                        new_delta += np.random.uniform(-0.1, 0.1)
+                        new_delta = new_delta % (2*np.pi)
+
+                        rotated_cand = c_n * np.exp(1j * (new_delta - delta))
+                        for n in range(N):
+                            V_n[n], c_n[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+                        delta = new_delta
+                        kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                        kwargs['last_hop_k'] = k
+                        stagnated = False # Reset stagnation
+
+            elif kwargs.get('enable_sa_hopping', False):
+                from .simulated_annealing_hopping import update_sa_hopping
+                if iters_in_basin >= 1: # SA hops more frequently, evaluates cost explicitly
+                    new_delta, new_V, new_c, new_cost, accepted = update_sa_hopping(
+                        delta, current_sa_cost, c_n, element, N, task, k, K_max,
+                        projection_method, w_phase, w_amp,
+                        initial_temp=kwargs.get('sa_temp', 1.0),
+                        cooling_rate=kwargs.get('sa_cooling', 0.85)
+                    )
+                    if accepted:
+                        delta = new_delta
+                        V_n = new_V
+                        c_n = new_c
+                        current_sa_cost = new_cost
+                        kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                        kwargs['last_hop_k'] = k
+                        stagnated = False
+
             if stagnated and iters_in_basin >= min_basin_iters:
                 if kwargs.get('enable_event_triggered_offset', False):
                     from .event_triggered_offset import trigger_basin_reselection
