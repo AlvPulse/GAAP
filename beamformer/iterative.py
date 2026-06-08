@@ -175,17 +175,29 @@ def optimize_beam_ap(
         if k > 0:
             volt_change = np.max(np.abs(history['voltages'][-1] - history['voltages'][-2]))
 
-            # Stagnation detection
-            # We relax the stagnation condition to catch slow oscillations or very slow progress
-            stagnated = volt_change < 5e-2 and abs(history['residuals'][-1] - history['residuals'][-2]) < 5e-2
+            # Stagnation detection based on PTNR cost, NOT just projection residual
+            # because deep null quality can change even when residual doesn't
+            stagnated = False
 
-            # Additional heuristic: If it's been a while (e.g. 10 iterations) and no major progress is made
-            if k >= 5:
-                recent_res_change = abs(history['residuals'][-1] - history['residuals'][-5])
-                if recent_res_change < 1e-2:
+            if 'costs' not in history:
+                history['costs'] = []
+            history['costs'].append(current_pattern_cost)
+
+            patience = kwargs.get('patience', 5)
+            eps = kwargs.get('stagnation_eps', 1e-2)
+
+            if k >= patience:
+                # We also want to check if cost isn't improving OR if it's getting worse
+                recent_cost_change = history['costs'][-patience] - history['costs'][-1]
+                if recent_cost_change < eps:
                     stagnated = True
+            elif volt_change < eps and abs(history['residuals'][-1] - history['residuals'][-2]) < eps:
+                stagnated = True
 
-            if stagnated:
+            # To avoid rapid hopping, require a minimum number of iterations in the current basin
+            min_basin_iters = kwargs.get('min_basin_iters', 3)
+            iters_in_basin = k - kwargs.get('last_hop_k', 0)
+            if stagnated and iters_in_basin >= min_basin_iters:
                 if kwargs.get('enable_event_triggered_offset', False):
                     from .event_triggered_offset import trigger_basin_reselection
 
@@ -206,8 +218,8 @@ def optimize_beam_ap(
                         c_n = new_c_n
 
                         # Reset adaptive step size globally
-                        if 'current_step_size' in kwargs:
-                            kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                        kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                        kwargs['last_hop_k'] = k
 
                 elif kwargs.get('enable_random_hopping', False):
                     # Random basin hopping fallback
@@ -219,8 +231,8 @@ def optimize_beam_ap(
                         V_n[n], c_n[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
                     delta = new_delta
 
-                    if 'current_step_size' in kwargs:
-                        kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                    kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
+                    kwargs['last_hop_k'] = k
 
 
             if volt_change < tol and current_residual < tol and not stagnated:

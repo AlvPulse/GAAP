@@ -34,17 +34,58 @@ def trigger_basin_reselection(
         changed: True if a new basin was selected.
     """
 
-    # Generate candidate deltas (uniformly distributed)
-    candidate_deltas = np.linspace(0, 2 * np.pi, n_candidates, endpoint=False)
+    # Generate candidate deltas (propose around previous offset with jitter)
+    candidate_deltas = [current_delta]
+    for _ in range(n_candidates - 1):
+        # 50% chance of random hopping, 50% chance of local jitter around current delta
+        if np.random.rand() > 0.5:
+            candidate_deltas.append(np.random.uniform(0, 2 * np.pi))
+        else:
+            jitter = np.random.normal(0, np.pi/4)
+            candidate_deltas.append((current_delta + jitter) % (2 * np.pi))
+
+    # Redefine evaluate_ptnr_cost internally so we can compare apples to apples
+    def evaluate_ptnr_cost(c_eval):
+        from .utils import oversampled_fft
+        u_grid, F = oversampled_fft(c_eval, 8)
+        power_db = 20 * np.log10(np.abs(F) + 1e-12)
+
+        cost_val = 0.0
+        max_ideal_power_db = 20 * np.log10(N)
+        if task.target_angles:
+            target_power = []
+            for angle in task.target_angles:
+                idx = np.argmin(np.abs(u_grid - angle))
+                target_power.append(power_db[idx])
+            avg_target_power = np.mean(target_power)
+
+            gain_loss = max_ideal_power_db - avg_target_power
+            if gain_loss > 3.0:
+                cost_val += 1e6 * gain_loss
+            else:
+                cost_val += 10.0 * gain_loss
+
+        if hasattr(task, 'null_angles') and task.null_angles:
+            null_power = []
+            for angle in task.null_angles:
+                idx = np.argmin(np.abs(u_grid - angle))
+                null_power.append(power_db[idx])
+            avg_null_power = np.mean(null_power)
+            cost_val += avg_null_power
+
+        return cost_val
 
     best_candidate_delta = current_delta
-    best_candidate_cost = current_cost
+    best_candidate_cost = evaluate_ptnr_cost(current_weights)
     best_candidate_V_n = None
     best_candidate_c_n = current_weights.copy()
 
     for delta in candidate_deltas:
         # 1. Project current weights onto the new rotated manifold basin
-        rotated_cand = current_weights * np.exp(1j * delta)
+        # It's crucial to evaluate candidates relative to the current coordinate frame.
+        # So we unrotate the current frame and apply the new delta.
+        delta_rel = (delta - current_delta + np.pi) % (2 * np.pi) - np.pi
+        rotated_cand = current_weights * np.exp(1j * delta_rel)
 
         V_cand = np.zeros(N)
         c_cand = np.zeros(N, dtype=np.complex128)
@@ -71,17 +112,7 @@ def trigger_basin_reselection(
             c_probe = c_cand
 
         # 3. Evaluate Cost (we want to minimize cost)
-        # Reuse IncrementalAFCache cost logic or simple evaluate
-        # Peak-to-Null Ratio cost (inverse)
-        from .cost_functions import evaluate_pattern_cost
-        # Let's use evaluate_pattern_cost or a simplified PTNR if nulls exist
-
-        cost = evaluate_pattern_cost(c_probe, task, oversample_factor=8)
-
-        # We penalize gain drop? evaluate_pattern_cost might handle it, but let's
-        # ensure it heavily penalizes if it loses main lobe.
-        # Actually evaluate_pattern_cost in cost_functions.py might just be Euclidean distance to ideal.
-        # Let's check cost_functions.py to be sure.
+        cost = evaluate_ptnr_cost(c_probe)
 
         if cost < best_candidate_cost:
             best_candidate_cost = cost
