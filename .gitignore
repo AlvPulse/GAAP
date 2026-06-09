@@ -6,3 +6,5 @@ debug_results/
 pencil_beam_result.png
 sector_beam_result.png
 multi_target_result.png
+experiments/benchmark_results.npy
+experiments/benchmark_6panel.png
