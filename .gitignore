@@ -6,5 +6,10 @@ debug_results/
 pencil_beam_result.png
 sector_beam_result.png
 multi_target_result.png
+<<<<<<< HEAD
 .venv/
 .vscode/
+=======
+experiments/benchmark_results.npy
+experiments/benchmark_6panel.png
+>>>>>>> origin/feature/outer-loop-controllers-1507911318846261181
