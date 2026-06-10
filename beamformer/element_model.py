@@ -37,7 +37,7 @@ class SyntheticVaractor(ElementData):
         v_norm = (V - self.v_min) / (self.v_max - self.v_min)
 
         # Base phase traversal
-        phi = 2 * np.pi * v_norm  # goes up to 3 pi
+        phi = 2 * np.pi * v_norm * 1.05 # goes up to 3 pi
 
         if self.folding:
             # Non-monotonic phase profile (wiggles back)
@@ -96,6 +96,84 @@ class IdealElement(ElementData):
 
     def get_complex_weight(self, V, f=None):
         return np.exp(1j * V)
+
+    def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
+        if method == 'euclidean':
+            distances = np.abs(self.c_grid - target_weight)
+        elif method == 'phase_only':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
+        elif method == 'weighted':
+            target_phase = np.angle(target_weight)
+            target_amp = np.abs(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            grid_amp = np.abs(self.c_grid)
+
+            phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
+            amp_diff = np.abs(grid_amp - target_amp)
+            distances = w_phase * phase_diff + w_amp * amp_diff
+        else:
+            raise ValueError(f"Unknown projection method: {method}")
+
+        idx = np.argmin(distances)
+        return self.V_grid[idx], self.c_grid[idx]
+
+
+import scipy.io
+
+class MeasuredVaractor(ElementData):
+    """
+    Element data loaded from actual hardware measurements (.mat files).
+    Assumes amplitude and phase matrices have matching voltage sweeps.
+    """
+    def __init__(self, amp_file='amplitude.mat', phase_file='phase.mat',
+                 v_min=0.0, v_max=15.0, n_points=500):
+        self.v_min = v_min
+        self.v_max = v_max
+        self.n_points = n_points
+
+        try:
+            # We look for the first valid numerical array in the .mat dictionaries
+            amp_data = scipy.io.loadmat(amp_file)
+            phase_data = scipy.io.loadmat(phase_file)
+
+            # Extract first non-metadata array
+            A_raw = next(val for key, val in amp_data.items() if not key.startswith('__'))
+            phi_raw = next(val for key, val in phase_data.items() if not key.startswith('__'))
+
+            # Flatten to 1D
+            A_raw = np.array(A_raw).flatten()
+            phi_raw = np.array(phi_raw).flatten()
+
+            # Assuming linear voltage sweep across the length of the arrays
+            raw_v_grid = np.linspace(v_min, v_max, len(A_raw))
+
+            # Interpolate onto a standardized high-resolution dense grid for fast projection
+            self.V_grid = np.linspace(v_min, v_max, n_points)
+            A_interp = np.interp(self.V_grid, raw_v_grid, A_raw)
+            phi_interp = np.interp(self.V_grid, raw_v_grid, phi_raw)
+
+            # Convert degrees to radians if necessary
+            if np.max(np.abs(phi_interp)) > 4 * np.pi: # likely degrees
+                phi_interp = np.deg2rad(phi_interp)
+
+            # Normalize amplitude if max is > 1
+            if np.max(A_interp) > 1.0:
+                A_interp = A_interp / np.max(A_interp)
+
+            self.c_grid = A_interp * np.exp(1j * phi_interp)
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to load or parse measured data: {e}")
+
+    def get_complex_weight(self, V, f=None):
+        # We can just interpolate from the high-res grid
+        # For an array V, map to indices
+        idx = np.searchsorted(self.V_grid, V)
+        idx = np.clip(idx, 0, len(self.V_grid)-1)
+        return self.c_grid[idx]
 
     def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         if method == 'euclidean':
