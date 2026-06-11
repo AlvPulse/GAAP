@@ -8,3 +8,7 @@ sector_beam_result.png
 multi_target_result.png
 experiments/benchmark_results.npy
 experiments/benchmark_6panel.png
+experiments/benchmark_sa_results.npy
+experiments/sa_convergence_ptnr.png
+experiments/sa_mechanics.png
+experiments/sa_metrics_bar.png
