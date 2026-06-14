@@ -18,8 +18,12 @@ def run_comprehensive_trial(seed, N, algo_name, B_total=200):
     np.random.seed(seed)
 
     element = SyntheticVaractor(beta=1.5, folding=True)
-    target_angle = 0.3
-    nulls = [-0.5, 0.1, 0.7]
+    target_angle = np.random.uniform(-0.4, 0.4)
+    nulls = []
+    while len(nulls) < 3:
+        n_ang = np.random.uniform(-0.9, 0.9)
+        if np.abs(n_ang - target_angle) > 0.15:
+            nulls.append(n_ang)
     task = Task(type='nulled', target_angles=[target_angle], null_angles=nulls, sll_ceiling=0.1)
 
     c_n = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
