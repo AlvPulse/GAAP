@@ -23,3 +23,7 @@ experiments/SOTA_Gain_Null_Separation.png
 experiments/SOTA_Pareto_Trajectory.png
 experiments/comprehensive_comparisons/data/*.csv
 experiments/comprehensive_comparisons/*.png
+experiments/Fact_Check_Inner_Resets.png
+experiments/Ultimate_Fact_Check.png
+experiments/ultimate_fact_check_iterations.csv
+experiments/ultimate_fact_check_trials.csv

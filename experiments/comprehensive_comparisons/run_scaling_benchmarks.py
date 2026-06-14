@@ -400,7 +400,8 @@ def run_scaling_benchmark():
             for seed in range(num_seeds):
                 if algo == 'PGD-Baseline':
                     df_iter, trial_dict = run_pgd_baseline(seed, N, B_total)
-
+                elif algo == 'GA-Monolithic':
+                    df_iter, trial_dict = run_gand_baseline(seed, N, B_total)
                 else:
                     df_iter, trial_dict = run_comprehensive_trial(seed, N, algo, B_total)
 
