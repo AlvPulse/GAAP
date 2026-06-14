@@ -76,6 +76,7 @@ def run_single_seed_sa(seed, N, controller_class, B_total=50):
 
         # 3. Accept/Reject
         accepted = controller.accept(current_cost, cand_cost)
+        old_delta = current_delta
 
         if accepted:
             current_delta = cand_delta
@@ -97,7 +98,7 @@ def run_single_seed_sa(seed, N, controller_class, B_total=50):
             lr_step=lr_step,
             lr_min=lr_min,
             new_cost=cand_cost,
-            current_delta=old_delta,
+            current_delta=current_delta,
             cand_delta=cand_delta,
             new_res=cand_res,
             r_target=1e-4, # Approximate target
