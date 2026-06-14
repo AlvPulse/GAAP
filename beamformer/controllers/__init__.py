@@ -5,3 +5,4 @@ from .policies import (
     policy_D_stagnation, policy_E_probe, policy_F_sa, policy_G_mgha,
     policy_H_predictive
 )
+from .trust_region import TR_HC, TR_SA

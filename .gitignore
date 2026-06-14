@@ -12,3 +12,6 @@ experiments/benchmark_sa_results.npy
 experiments/sa_convergence_ptnr.png
 experiments/sa_mechanics.png
 experiments/sa_metrics_bar.png
+experiments/landscape_snapshots.png
+experiments/sa_trajectory_stats.png
+experiments/debug_trust_region.png
