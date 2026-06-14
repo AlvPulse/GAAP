@@ -21,7 +21,8 @@ class FixedOffset(BaseController):
         return current_delta
 
     def accept(self, current_cost, new_cost):
-        return False # Never move
+        # Always accept, letting AP+LR run continuously on fixed offset
+        return True
 
 class RandomRestart(BaseController):
     def __init__(self, restart_interval=10, **kwargs):
@@ -36,10 +37,8 @@ class RandomRestart(BaseController):
         return current_delta
 
     def accept(self, current_cost, new_cost):
-        # We force acceptance on restart intervals
-        if self.counter % self.restart_interval == 0:
-            return True
-        return False
+        # Always accept the state to let AP+LR run continuously
+        return True
 
 class HillClimbing(BaseController):
     def __init__(self, step_size=np.pi/18, **kwargs): # 10 degrees default
@@ -223,12 +222,10 @@ class CEM(BaseController):
         return self.pop_deltas[self.curr_idx]
 
     def accept(self, current_cost, new_cost):
-        # In CEM, we always evaluate (so "accept" the evaluation)
-        # but we don't necessarily update the base state immediately.
-        # We will track costs and update mu/sigma at end of generation.
-        # We return True to ensure the outer loop sets the new cost for tracking,
-        # but for true CEM, the "best" elite becomes the center.
-        return True
+        # In CEM, we don't 'accept' in the SA sense during population eval
+        # because we don't want the state wandering. We only update the state
+        # tracking when moving to a new elite center.
+        return False
 
     def update_state(self, accepted, new_cost=float('inf'), **kwargs):
         super().update_state(accepted, **kwargs)
@@ -250,3 +247,83 @@ class CEM(BaseController):
             self.sigma = np.sqrt(-2 * np.log(R + 1e-12))
 
             self.curr_idx = 0
+
+class CROA(BaseController):
+    """
+    Continuation-Reheated Offset Annealing (CROA).
+    Treats offset as a low-dimensional continuation parameter.
+    Does NOT hard-reset the inner optimizer memory (lr_step, TR radius).
+    Softly reanneals them based on circular distance and residual scaling.
+    """
+    def __init__(self, T0=10.0, alpha=0.9, sigma=np.pi/12, W=5, eta=0.5, **kwargs):
+        super().__init__(**kwargs)
+        self.T0 = T0
+        self.T = T0
+        self.alpha = alpha
+        self.sigma_T = sigma
+        self.W = W
+        self.eta = eta
+
+        # Internal copies of the inner optimizer state (memory)
+        self.lr_step = kwargs.get('lr_initial', 0.05)
+        self.lr_initial = kwargs.get('lr_initial', 0.05)
+
+        # We also treat the proposal standard deviation as a trust-region radius \Delta
+        self.TR = sigma
+        self.TR0 = sigma
+
+    def propose(self, current_delta, **kwargs):
+        # Heavy-tailed proposal using TR
+        if np.random.rand() < 0.1:
+            J_t = np.random.normal(0, np.pi/2)
+        else:
+            J_t = 0
+
+        new_delta = (current_delta + np.random.normal(0, self.TR) + J_t) % (2*np.pi)
+        return new_delta
+
+    def accept(self, current_cost, new_cost):
+        if new_cost < current_cost:
+            return True
+        if self.T > 1e-6:
+            prob = np.exp(-(new_cost - current_cost) / self.T)
+            return np.random.rand() < prob
+        return False
+
+    def update_state(self, accepted, **kwargs):
+        super().update_state(accepted, **kwargs)
+
+        if accepted:
+            current_delta = kwargs.get('current_delta', 0.0)
+            cand_delta = kwargs.get('cand_delta', 0.0)
+            r_k = kwargs.get('new_res', 0.0)
+            r_target = kwargs.get('r_target', 0.0)
+            r_0 = kwargs.get('r_0', 1.0)
+
+            # Calculate distance rho
+            diff = np.abs(cand_delta - current_delta)
+            circular_diff = min(diff, 2*np.pi - diff)
+            rho = circular_diff / np.pi # \rho \in [0, 1]
+
+            # Calculate residual scaling s
+            s = np.clip((r_k - r_target) / max((r_0 - r_target), 1e-6), 0.0, 1.0)
+
+            # Soft reannealing of inner memory
+            self.lr_step = (1 - rho*s) * self.lr_step + (rho*s) * self.lr_initial
+            self.TR = (1 - rho*s) * self.TR + (rho*s) * self.TR0
+
+        # Reheat trigger (severe stagnation only)
+        history_r = kwargs.get('history_r', [])
+        reheated = False
+        if len(history_r) >= self.W:
+            r_t = history_r[-1]
+            r_t_W = history_r[-self.W]
+
+            if r_t_W > 1e-12:
+                gamma = (r_t / r_t_W)**(1/self.W)
+                if gamma > 0.98 and self.lr_step <= kwargs.get('lr_min', 0.001) * 1.01:
+                    self.T = self.eta * self.T0
+                    reheated = True
+
+        if not reheated:
+            self.T *= self.alpha
