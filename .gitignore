@@ -21,3 +21,5 @@ experiments/data/*.csv
 experiments/SOTA_Time_Scaling.png
 experiments/SOTA_Gain_Null_Separation.png
 experiments/SOTA_Pareto_Trajectory.png
+experiments/comprehensive_comparisons/data/*.csv
+experiments/comprehensive_comparisons/*.png
