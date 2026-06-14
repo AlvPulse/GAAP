@@ -30,7 +30,7 @@ def run_trajectory_tracking(seed, N, controller_class, B_total=100):
     controller = controller_class()
 
     # Eval initial
-    c_n, V_n, res = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=0.05)
+    c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=0.05)
     _, _, current_ptnr = get_metrics(c_n, task, element)
     current_cost = -current_ptnr
 
@@ -45,7 +45,7 @@ def run_trajectory_tracking(seed, N, controller_class, B_total=100):
         cand_delta = controller.propose(current_delta)
 
         cand_c, cand_V = apply_phase_jump(best_c, best_V, best_delta, cand_delta, element)
-        cand_c, cand_V, cand_res = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=0.05)
+        cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=0.05)
 
         _, _, ptnr = get_metrics(cand_c, task, element)
         cand_cost = -ptnr

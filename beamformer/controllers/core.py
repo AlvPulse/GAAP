@@ -39,7 +39,9 @@ def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
     V_n_new = (1 - alpha) * V_n + alpha * V_cand
 
     # 3. Local Refinement (Micro-LR)
+    accepted_corrections = 0
     if refinement_steps_inner > 0:
+        V_n_pre_lr = V_n_new.copy()
         c_lr_init = np.zeros(N, dtype=np.complex128)
         for n in range(N):
             c_lr_init[n] = element.get_complex_weight(V_n_new[n])
@@ -57,12 +59,15 @@ def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
             step_size=step_size
         )
 
+        # Approximate number of accepted tangent corrections
+        accepted_corrections = np.sum(np.abs(V_n_new - V_n_pre_lr) > 1e-4)
+
     # Final state evaluation
     c_n_new = np.zeros(N, dtype=np.complex128)
     for n in range(N):
         c_n_new[n] = element.get_complex_weight(V_n_new[n])
 
-    return c_n_new, V_n_new, current_residual
+    return c_n_new, V_n_new, current_residual, accepted_corrections
 
 def apply_phase_jump(c_n, V_n, delta_old, delta_new, element, projection_method='euclidean', w_phase=1.0, w_amp=0.5):
     """

@@ -49,7 +49,7 @@ def run_single_seed_sa(seed, N, controller_class, B_total=50):
     lr_max = 0.2
 
     # Evaluate initial state
-    c_n, V_n, res = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
+    c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
     _, _, current_ptnr = get_metrics(c_n, task, element)
     current_cost = -current_ptnr
 
@@ -69,7 +69,7 @@ def run_single_seed_sa(seed, N, controller_class, B_total=50):
         cand_c, cand_V = apply_phase_jump(best_c, best_V, best_delta, cand_delta, element)
 
         # Execute 1 step AP + LR
-        cand_c, cand_V, cand_res = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
+        cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
 
         null_depth, gain, ptnr = get_metrics(cand_c, task, element)
         cand_cost = -ptnr

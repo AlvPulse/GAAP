@@ -16,3 +16,5 @@ experiments/landscape_snapshots.png
 experiments/sa_trajectory_stats.png
 experiments/debug_trust_region.png
 experiments/benchmark_croa.png
+experiments/Fig*.png
+experiments/data/*.csv
