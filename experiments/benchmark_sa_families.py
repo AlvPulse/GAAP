@@ -12,6 +12,7 @@ from beamformer.controllers.core import step_ap_lr, apply_phase_jump
 from beamformer.controllers.metrics import get_metrics
 
 from beamformer.controllers.sa_families import (
+    CROA,
     FixedOffset, RandomRestart, HillClimbing, BasinHopping,
     SA, VFSA, ASA, HT_ROA, CEM
 )
@@ -82,12 +83,30 @@ def run_single_seed_sa(seed, N, controller_class, B_total=50):
             best_c = cand_c
             best_V = cand_V
             best_delta = cand_delta
-            # Reset LR step size on jump
-            if delta_diff > 1e-3:
-                lr_step = lr_initial
+            # Handle LR step preservation or reset based on controller type
+            if hasattr(controller, 'lr_step'):
+                lr_step = controller.lr_step
+            else:
+                if delta_diff > 1e-3:
+                    lr_step = lr_initial
 
         # Update Controller State
-        controller.update_state(accepted, history_r=history_res, lr_step=lr_step, lr_min=lr_min, new_cost=cand_cost)
+        controller.update_state(
+            accepted,
+            history_r=history_res,
+            lr_step=lr_step,
+            lr_min=lr_min,
+            new_cost=cand_cost,
+            current_delta=current_delta,
+            cand_delta=cand_delta,
+            new_res=cand_res,
+            r_target=1e-4, # Approximate target
+            r_0=history_res[0] if history_res else 1.0
+        )
+
+        if hasattr(controller, 'lr_step'):
+            lr_step = controller.lr_step
+
 
         # Record metrics (recording the BEST seen state, or current state depending on interpretation.
         # For SA, tracking current state is standard)
@@ -118,7 +137,8 @@ def run_sa_benchmarks():
         'VFSA': VFSA,
         'ASA': ASA,
         'HT-ROA': HT_ROA,
-        'CEM': CEM
+        'CEM': CEM,
+        'CROA': CROA
     }
 
     num_seeds = 20
