@@ -11,7 +11,7 @@ from beamformer.element_model import SyntheticVaractor
 from beamformer.pattern_projection import Task
 from beamformer.synthesis import synthesize_schelkunoff
 from beamformer.controllers.core import step_ap_lr, apply_phase_jump
-from beamformer.controllers.metrics import get_metrics
+from beamformer.controllers.metrics import get_metrics, get_sll
 from beamformer.controllers.sa_families import BaseController, FixedOffset, SA, HillClimbing, BasinHopping
 from beamformer.controllers.trust_region import TR_HC
 
@@ -46,6 +46,7 @@ def run_showdown_trial(seed, N, algo_name, controller_class, controller_kwargs, 
 
     c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
     null_depth, gain, current_ptnr = get_metrics(c_n, task, element)
+    sll = get_sll(c_n, task)
     current_cost = -current_ptnr
 
     best_c, best_V, best_delta = c_n.copy(), V_n.copy(), current_delta
@@ -63,6 +64,7 @@ def run_showdown_trial(seed, N, algo_name, controller_class, controller_kwargs, 
         cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
 
         cand_null, cand_gain, cand_ptnr = get_metrics(cand_c, task, element)
+        cand_sll = get_sll(cand_c, task)
         cand_cost = -cand_ptnr
 
         accepted = controller.accept(current_cost, cand_cost)
@@ -74,6 +76,7 @@ def run_showdown_trial(seed, N, algo_name, controller_class, controller_kwargs, 
             current_ptnr = cand_ptnr
             gain = cand_gain
             null_depth = cand_null
+            sll = cand_sll
 
             # HARD RESET logic (Since it was proven to be the best for exploring the sharp topology)
             if delta_diff > 1e-3:
@@ -102,6 +105,7 @@ def run_showdown_trial(seed, N, algo_name, controller_class, controller_kwargs, 
             'PTNR': current_ptnr,
             'gain': gain,
             'null_depth': null_depth,
+            'SLL': sll,
             'offset_jump': delta_diff if accepted else 0.0,
             'accept_ratio': controller.accepted_moves / max(1, controller.total_proposals)
         })

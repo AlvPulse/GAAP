@@ -28,3 +28,7 @@ experiments/Ultimate_Fact_Check.png
 experiments/ultimate_fact_check_iterations.csv
 experiments/ultimate_fact_check_trials.csv
 experiments/Final_Showdown.png
+experiments/SOTA_Performance_Scaling.png
+experiments/SOTA_Success_Profiles.png
+experiments/SOTA_Pareto_Frontier.png
+experiments/data/sota_benchmark_final.csv

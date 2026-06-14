@@ -69,6 +69,8 @@ def plot_showdown(df_iter, df_trials):
     plt.savefig('experiments/Final_Showdown.png')
     print("Saved Final Showdown plots to experiments/Final_Showdown.png")
 
+
 if __name__ == '__main__':
     df_iter, df_trials = load_data()
     plot_showdown(df_iter, df_trials)
+    plot_detailed_metrics(df_iter)
