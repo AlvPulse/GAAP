@@ -13,7 +13,6 @@ from beamformer.controllers.core import step_ap_lr, apply_phase_jump
 from beamformer.controllers.metrics import get_metrics, get_sll
 from beamformer.controllers.unified import StrainGuidedController
 from beamformer.controllers.sa_families import SA, FixedOffset
-from beamformer.controllers.global_optimizers import GA_1D, PSO_1D
 
 def run_comprehensive_trial(seed, N, algo_name, B_total=200):
     np.random.seed(seed)
@@ -42,12 +41,7 @@ def run_comprehensive_trial(seed, N, algo_name, B_total=200):
     elif algo_name == 'SA':
         controller = SA()
         refinement_steps_inner = 20
-    elif algo_name == 'GA':
-        controller = GA_1D(pop_size=10)
-        refinement_steps_inner = 20
-    elif algo_name == 'PSO':
-        controller = PSO_1D(swarm_size=10)
-        refinement_steps_inner = 20
+
     elif algo_name == 'AP-Only':
         controller = FixedOffset()
         refinement_steps_inner = 0
@@ -204,14 +198,196 @@ def run_comprehensive_trial(seed, N, algo_name, B_total=200):
 
     return df_iter, trial_data
 
+def run_gand_baseline(seed, N, B_total=200):
+    import time
+    import numpy as np
+    import pandas as pd
+    from beamformer.element_model import SyntheticVaractor
+    from beamformer.pattern_projection import Task
+    from beamformer.synthesis import synthesize_schelkunoff
+    from beamformer.controllers.metrics import get_metrics, get_sll
+
+    np.random.seed(seed)
+    element = SyntheticVaractor(beta=1.5, folding=True)
+    task = Task(type='nulled', target_angles=[0.3], null_angles=[-0.5, 0.1, 0.7], sll_ceiling=0.1)
+
+    # Init pop around schelkunoff
+    init_c = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
+    init_V = np.zeros(N)
+    for n in range(N):
+        init_V[n], _ = element.project(init_c[n])
+
+    pop_size = 20
+    # Population of branch assignments (voltages)
+    pop = np.zeros((pop_size, N))
+    for i in range(pop_size):
+        pop[i] = init_V + np.random.normal(0, 1.0, N)
+        pop[i] = np.clip(pop[i], element.v_min, element.v_max)
+
+    iter_data = []
+    start_time = time.time()
+
+    for k in range(1, B_total + 1):
+        fitness = np.zeros(pop_size)
+        c_pops = np.zeros((pop_size, N), dtype=np.complex128)
+
+        # Evaluate
+        for i in range(pop_size):
+            for n in range(N):
+                c_pops[i, n] = element.get_complex_weight(pop[i, n])
+
+            _, _, ptnr = get_metrics(c_pops[i], task, element)
+            fitness[i] = ptnr
+
+        # Log best
+        best_idx = np.argmax(fitness)
+        best_c = c_pops[best_idx]
+        null_depth, gain, ptnr = get_metrics(best_c, task, element)
+        sll = get_sll(best_c, task)
+
+        iter_data.append({
+            'algorithm': 'GA-Monolithic',
+            'N': N,
+            'seed': seed,
+            'iteration': k,
+            'PTNR': ptnr,
+            'gain': gain,
+            'null_depth': null_depth,
+            'SLL': sll
+        })
+
+        # Tournament Selection
+        new_pop = np.zeros((pop_size, N))
+        for i in range(pop_size):
+            i1, i2 = np.random.choice(pop_size, 2, replace=False)
+            winner = i1 if fitness[i1] > fitness[i2] else i2
+            new_pop[i] = pop[winner].copy()
+
+        # Single-point crossover
+        for i in range(0, pop_size-1, 2):
+            if np.random.rand() < 0.8:
+                pt = np.random.randint(1, N-1)
+                temp = new_pop[i, pt:].copy()
+                new_pop[i, pt:] = new_pop[i+1, pt:]
+                new_pop[i+1, pt:] = temp
+
+        # Mutation (creep)
+        mutation_mask = np.random.rand(pop_size, N) < 0.1
+        mutations = np.random.normal(0, 0.5, (pop_size, N))
+        new_pop += mutation_mask * mutations
+        new_pop = np.clip(new_pop, element.v_min, element.v_max)
+
+        # Elitism
+        new_pop[0] = pop[best_idx]
+        pop = new_pop
+
+    runtime = time.time() - start_time
+    df_iter = pd.DataFrame(iter_data)
+    ptnrs = df_iter['PTNR'].values
+
+    def time_to(target_db):
+        idx = np.where(ptnrs >= target_db)[0]
+        return idx[0] + 1 if len(idx) > 0 else B_total
+
+    trial_data = {
+        'algorithm': 'GA-Monolithic',
+        'N': N,
+        'seed': seed,
+        'final_PTNR': ptnrs[-1],
+        'final_gain': df_iter['gain'].iloc[-1],
+        'final_null': df_iter['null_depth'].iloc[-1],
+        'final_SLL': df_iter['SLL'].iloc[-1],
+        'runtime': runtime,
+        'TTT_30dB': time_to(30),
+        'TTT_40dB': time_to(40),
+        'TTT_50dB': time_to(50)
+    }
+    return df_iter, trial_data
+
 def run_pgd_baseline(seed, N, B_total=200):
-    return run_comprehensive_trial(seed, N, 'PGD-Baseline', B_total)
+    import time
+    import numpy as np
+    import pandas as pd
+    from beamformer.element_model import SyntheticVaractor
+    from beamformer.pattern_projection import Task
+    from beamformer.synthesis import synthesize_schelkunoff, get_steering_vector
+    from beamformer.controllers.metrics import get_metrics, get_sll
+
+    np.random.seed(seed)
+    element = SyntheticVaractor(beta=1.5, folding=True)
+    task = Task(type='nulled', target_angles=[0.3], null_angles=[-0.5, 0.1, 0.7], sll_ceiling=0.1)
+
+    initial_weights = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
+    phases = np.angle(initial_weights)
+    lr = 0.01
+
+    iter_data = []
+    start_time = time.time()
+
+    # We step PGD iteration by iteration to log it identically
+    for k in range(1, B_total + 1):
+        c_n = np.zeros(N, dtype=np.complex128)
+        for n in range(N):
+            _, c_n[n] = element.project(np.exp(1j * phases[n]), method='phase_only')
+
+        grad = np.zeros(N)
+        for nu in task.null_angles:
+            sv = get_steering_vector(N, nu)
+            af_null = np.sum(c_n * np.conj(sv))
+            dAF_dphi = 1j * c_n * np.conj(sv)
+            grad += 2 * np.real(af_null * np.conj(dAF_dphi))
+
+        for ta in task.target_angles:
+            sv = get_steering_vector(N, ta)
+            af_target = np.sum(c_n * np.conj(sv))
+            dAF_dphi = 1j * c_n * np.conj(sv)
+            grad -= 2 * np.real(af_target * np.conj(dAF_dphi)) * 0.1
+
+        phases -= lr * grad
+
+        # Log state
+        null_depth, gain, ptnr = get_metrics(c_n, task, element)
+        sll = get_sll(c_n, task)
+
+        iter_data.append({
+            'algorithm': 'PGD-Baseline',
+            'N': N,
+            'seed': seed,
+            'iteration': k,
+            'PTNR': ptnr,
+            'gain': gain,
+            'null_depth': null_depth,
+            'SLL': sll
+        })
+
+    runtime = time.time() - start_time
+    df_iter = pd.DataFrame(iter_data)
+    ptnrs = df_iter['PTNR'].values
+
+    def time_to(target_db):
+        idx = np.where(ptnrs >= target_db)[0]
+        return idx[0] + 1 if len(idx) > 0 else B_total
+
+    trial_data = {
+        'algorithm': 'PGD-Baseline',
+        'N': N,
+        'seed': seed,
+        'final_PTNR': ptnrs[-1],
+        'final_gain': df_iter['gain'].iloc[-1],
+        'final_null': df_iter['null_depth'].iloc[-1],
+        'final_SLL': df_iter['SLL'].iloc[-1],
+        'runtime': runtime,
+        'TTT_30dB': time_to(30),
+        'TTT_40dB': time_to(40),
+        'TTT_50dB': time_to(50)
+    }
+    return df_iter, trial_data
 
 def run_scaling_benchmark():
     os.makedirs('experiments/comprehensive_comparisons/data', exist_ok=True)
 
     scales = [16, 64, 256]
-    algorithms = ['Strain-Guided Pipeline', 'SA', 'GA', 'PSO', 'AP-Only', 'PGD-Baseline']
+    algorithms = ['Strain-Guided Pipeline', 'AP-Only', 'PGD-Baseline', 'GA-Monolithic']
     num_seeds = 2
     B_total = 50
 
@@ -224,7 +400,7 @@ def run_scaling_benchmark():
             for seed in range(num_seeds):
                 if algo == 'PGD-Baseline':
                     df_iter, trial_dict = run_pgd_baseline(seed, N, B_total)
-                    trial_dict['runtime'] *= (N / 64) * 2.0
+
                 else:
                     df_iter, trial_dict = run_comprehensive_trial(seed, N, algo, B_total)
 
