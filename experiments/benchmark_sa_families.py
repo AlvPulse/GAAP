@@ -19,7 +19,7 @@ from beamformer.controllers.sa_families import (
 def run_single_seed_sa(seed, N, controller_class, B_total=50):
     np.random.seed(seed)
 
-    element = SyntheticVaractor(beta=1.5, folding=True)
+    element = SyntheticVaractor(beta=0.8, folding=True)
     target_angle = np.random.uniform(0.1, 0.5)
     nulls = [np.random.uniform(-0.8, -0.2), np.random.uniform(0.6, 0.9), np.random.uniform(-0.1, 0.0)]
     task = Task(type='nulled', target_angles=[target_angle], null_angles=nulls, sll_ceiling=0.1)
@@ -122,7 +122,7 @@ def run_sa_benchmarks():
     }
 
     num_seeds = 20
-    N = 64
+    N = 256
     B_total = 50
 
     results = {name: [] for name in controllers.keys()}
