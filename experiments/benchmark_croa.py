@@ -58,8 +58,11 @@ def run_deep_dive(seed, N, controller_class, B_total=100):
 
         accepted = controller.accept(current_cost, cand_cost)
 
+
+        # Calculate diff before state variables update
+        old_delta = current_delta
+
         if accepted:
-            current_delta = cand_delta
             current_cost = cand_cost
             best_c, best_V, best_delta = cand_c, cand_V, cand_delta
 
@@ -75,12 +78,15 @@ def run_deep_dive(seed, N, controller_class, B_total=100):
             lr_step=lr_step,
             lr_min=lr_min,
             new_cost=cand_cost,
-            current_delta=current_delta,
+            current_delta=old_delta,
             cand_delta=cand_delta,
             new_res=cand_res,
             r_target=1e-4,
             r_0=history_res[0] if history_res else 1.0
         )
+
+        if accepted:
+            current_delta = cand_delta
 
         if hasattr(controller, 'lr_step'):
             lr_step = controller.lr_step
