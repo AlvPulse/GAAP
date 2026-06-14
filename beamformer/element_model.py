@@ -61,7 +61,7 @@ class SyntheticVaractor(ElementData):
     def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         """
         Brute-force over voltage grid. Fast and robust to non-monotonic curves.
-        Returns (best_V, best_c).
+        Returns (best_V, best_c, branch_id).
         """
         if method == 'euclidean':
             distances = np.abs(self.c_grid - target_weight)
@@ -84,7 +84,7 @@ class SyntheticVaractor(ElementData):
             raise ValueError(f"Unknown projection method: {method}")
 
         idx = np.argmin(distances)
-        return self.V_grid[idx], self.c_grid[idx]
+        return self.V_grid[idx], self.c_grid[idx], idx
 
 class IdealElement(ElementData):
     """
@@ -118,7 +118,7 @@ class IdealElement(ElementData):
             raise ValueError(f"Unknown projection method: {method}")
 
         idx = np.argmin(distances)
-        return self.V_grid[idx], self.c_grid[idx]
+        return self.V_grid[idx], self.c_grid[idx], idx
 
 
 import scipy.io
@@ -196,4 +196,4 @@ class MeasuredVaractor(ElementData):
             raise ValueError(f"Unknown projection method: {method}")
 
         idx = np.argmin(distances)
-        return self.V_grid[idx], self.c_grid[idx]
+        return self.V_grid[idx], self.c_grid[idx], idx

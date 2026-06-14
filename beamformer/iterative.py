@@ -54,7 +54,11 @@ def optimize_beam_ap(
 
     # Warm start projection onto hardware
     for n in range(N):
-        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * delta), method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        res = element.project(c_n[n] * np.exp(1j * delta), method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        if len(res) == 3:
+            V_n[n], c_n[n], _ = res
+        else:
+            V_n[n], c_n[n] = res
 
     logger = None
     if debug_dir:
@@ -114,7 +118,11 @@ def optimize_beam_ap(
 
         current_residual = 0.0
         for n in range(N):
-            V_cand[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            res = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            if len(res) == 3:
+                V_cand[n], c_proj[n], _ = res
+            else:
+                V_cand[n], c_proj[n] = res
             current_residual += np.abs(rotated_cand[n] - c_proj[n])**2
 
         # Damping is static since delta is fixed in Stage 0

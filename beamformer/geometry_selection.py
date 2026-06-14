@@ -42,7 +42,11 @@ def select_optimal_geometry(
         c_proj = np.zeros(N, dtype=np.complex128)
 
         for n in range(N):
-            V_proj[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method)
+            res = element.project(rotated_cand[n], method=projection_method)
+            if len(res) == 3:
+                V_proj[n], c_proj[n], _ = res
+            else:
+                V_proj[n], c_proj[n] = res
 
         # 1. Aperture Potential (Gain Capacity)
         E_eff = compute_aperture_potential(c_proj)

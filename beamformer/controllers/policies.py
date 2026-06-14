@@ -2,15 +2,16 @@ import numpy as np
 
 # POLICY A: Fixed Baseline
 def policy_A_fixed(t, current_delta, **kwargs):
-    return current_delta, False
+    return current_delta
 
 # POLICY B: Random Basin Hopping
 def policy_B_random(t, current_delta, **kwargs):
     if np.random.rand() < 0.2:
-        return np.random.uniform(0, 2*np.pi), True
-    return current_delta, False
+        return np.random.uniform(0, 2*np.pi)
+    return current_delta
 
 # POLICY C: Trajectory-Aware Periodic Scan
+# It triggers every M steps. We scan locally around the historical best null offset.
 def policy_C_periodic_scan(t, current_delta, M, history_null, history_gain, best_delta_null, best_delta_gain, scan_idx, **kwargs):
     if t % M == 0 and t >= M:
         recent_null = np.mean(history_null[-M:])
@@ -25,11 +26,11 @@ def policy_C_periodic_scan(t, current_delta, M, history_null, history_gain, best
             idx = scan_idx % len(phi_scan)
             shift = np.deg2rad(phi_scan[idx])
             new_delta = (best_delta_null + shift) % (2*np.pi)
-            return new_delta, True, scan_idx + 1
+            return new_delta, scan_idx + 1
         else:
             # Gain bottleneck
-            return best_delta_gain, True, scan_idx
-    return current_delta, False, scan_idx
+            return best_delta_gain, scan_idx
+    return current_delta, scan_idx
 
 # POLICY D: Stagnation-Triggered Trajectory Escapement
 def policy_D_stagnation(t, current_delta, W, history_null, history_gain, history_flips, history_c, **kwargs):
@@ -45,11 +46,11 @@ def policy_D_stagnation(t, current_delta, W, history_null, history_gain, history
             # calculate mean phase change
             phase_change = np.angle(np.sum(c_t * np.conj(c_t_W)))
             new_delta = (current_delta + phase_change + np.pi/2) % (2*np.pi)
-            return new_delta, True
-    return current_delta, False
+            return new_delta
+    return current_delta
 
 # POLICY E: Probe-Based Diversity Optimization
-def policy_E_probe(t, current_delta, W, history_null, history_gain, history_flips, current_c, element, N, task, **kwargs):
+def policy_E_probe(t, current_delta, W, history_null, history_gain, history_flips, current_c, current_V, current_b, element, N, task, **kwargs):
     if t >= W:
         sigma_null = np.std(history_null[-W:])
         sigma_gain = np.std(history_gain[-W:])
@@ -62,22 +63,19 @@ def policy_E_probe(t, current_delta, W, history_null, history_gain, history_flip
             best_cand = current_delta
             best_null_residual = float('inf')
 
-            current_b = np.zeros(N)
-            for n in range(N):
-                current_b[n], _ = element.project(current_c[n], method='euclidean')
-
             for cand in candidates:
-                cand_c = current_c * np.exp(1j * cand)
+                cand_c = current_c * np.exp(1j * (cand - current_delta))
                 cand_V = np.zeros(N)
                 for n in range(N):
-                    cand_V[n], cand_c[n] = element.project(cand_c[n], method='euclidean')
+                    res = element.project(cand_c[n], method='euclidean')
+                    cand_V[n] = res[0]
+                    cand_c[n] = res[1]
 
-                # 2 steps of pure AP
+                # exactly 2 steps of pure AP
                 for _ in range(2):
-                    cand_c, cand_V, _ = step_ap_lr(cand_c, cand, cand_V, task, element, refinement_steps_inner=0)
+                    cand_c, cand_V, _, _, _, _, b_probe = step_ap_lr(cand_c, cand, cand_V, task, element, refinement_steps_inner=0)
 
-                b_probe = cand_V
-                D = np.sum(np.abs(b_probe - current_b) > 2.0)
+                D = np.sum(b_probe != current_b)
 
                 if 0.1 * N <= D <= 0.4 * N:
                     from .metrics import get_metrics
@@ -87,24 +85,23 @@ def policy_E_probe(t, current_delta, W, history_null, history_gain, history_flip
                         best_cand = cand
 
             if best_cand != current_delta:
-                return best_cand, True
+                return best_cand
 
-    return current_delta, False
+    return current_delta
 
 # POLICY F: Simulated Annealing
-def policy_F_sa(t, current_delta, current_ptnr, T_0, **kwargs):
-    # Propose new
+# Returns proposed delta and a temperature T_t.
+# The acceptance logic will run in the main benchmark script.
+def policy_F_sa_propose(t, current_delta, T_0, **kwargs):
+    T_t = T_0 * (0.85)**t
     new_delta = (current_delta + np.random.normal(0, np.deg2rad(15))) % (2*np.pi)
+    return new_delta, T_t
 
-    # We must evaluate it (requires 1 step AP+LR which we will mock by passing back the new delta and letting the loop do it)
-    # Actually to do it right, we propose the delta, return it, and the runner evaluates it and accepts/rejects.
-    # To keep runner simple, we just return the proposal and a flag saying "evaluate this".
-    return new_delta, True
+# POLICY G: Kinetic Simulated Annealing (Ablation)
+def policy_G_ksa_propose(t, current_delta, T_0, W, history_c, history_null, history_gain, history_flips, **kwargs):
+    T_t = T_0 * (0.85)**t
 
-# POLICY G: Momentum-Guided Hamiltonian Annealing
-def policy_G_mgha(t, current_delta, W, history_null, history_gain, history_flips, history_c, **kwargs):
-    # Similar to D, but adds velocity tracking
-    if t >= W:
+    if t > W and len(history_c) >= W:
         sigma_null = np.std(history_null[-W:])
         sigma_gain = np.std(history_gain[-W:])
         avg_flips = np.mean(history_flips[-W:])
@@ -114,68 +111,12 @@ def policy_G_mgha(t, current_delta, W, history_null, history_gain, history_flips
         phase_velocity = np.angle(np.sum(c_t * np.conj(c_t_W))) / W
 
         if (sigma_null < 0.5) and (sigma_gain < 0.2) and (avg_flips <= 1):
-            # Surge kinetic energy
-            new_delta = (current_delta + phase_velocity * W + np.random.uniform(np.pi/4, 3*np.pi/4)) % (2*np.pi)
-            return new_delta, True
+            # Explode
+            new_delta = np.random.uniform(0, 2*np.pi)
         else:
-            # Drift with velocity
-            if np.random.rand() < 0.1: # 10% chance to follow momentum
-                new_delta = (current_delta + phase_velocity) % (2*np.pi)
-                return new_delta, True
-    return current_delta, False
+            # Shifted Gaussian
+            new_delta = (current_delta + phase_velocity + np.random.normal(0, np.deg2rad(15))) % (2*np.pi)
+    else:
+        new_delta = (current_delta + np.random.normal(0, np.deg2rad(15))) % (2*np.pi)
 
-# POLICY H: Predictive-Convergence Deadlock Resolution
-def policy_H_predictive(t, current_delta, W, history_V, current_V, epsilon_V, B_total, task, element, current_c, current_lr_step, lr_min, tol=-35, epsilon_imp=1.0, M=12, **kwargs):
-    if len(history_V) == W:
-        V_old = history_V[0]
-        if V_old <= 0: V_old = 1e-12
-        rho_hat = (current_V / V_old) ** (1/W)
-        B_rem = B_total - t
-        if B_rem <= 0:
-            B_rem = 1
-        rho_req = (epsilon_V / current_V) ** (1/B_rem) if current_V > epsilon_V else 0
-
-        if (rho_hat >= min(rho_req, 0.995)) and (current_lr_step <= lr_min * 1.01):
-            # Deadlock
-            from .core import step_ap_lr
-            from .metrics import get_metrics
-
-            candidates = np.linspace(0, 2*np.pi, M, endpoint=False)
-            best_delta = current_delta
-            best_gamma = float('inf')
-            any_safe = False
-
-            # evaluate current objective terms
-            null_curr, gain_curr, _ = get_metrics(current_c, task, element)
-
-            for cand in candidates:
-                cand_c = current_c * np.exp(1j * cand)
-                cand_V = np.zeros(kwargs.get('N', 64))
-                for n in range(kwargs.get('N', 64)):
-                    cand_V[n], cand_c[n] = element.project(cand_c[n], method='euclidean')
-
-                # single AP
-                cand_c, cand_V, res = step_ap_lr(cand_c, cand, cand_V, task, element, refinement_steps_inner=0)
-
-                gamma_tilde = res / max(current_V, 1e-12)
-
-                # check safe improvement
-                null_cand, gain_cand, _ = get_metrics(cand_c, task, element)
-
-                safe = True
-                if null_curr > tol: # if we are violating null constraint
-                    if (null_cand - null_curr) > -epsilon_imp: # negative is better for null depth
-                        safe = False
-
-                if safe and gamma_tilde < best_gamma:
-                    best_gamma = gamma_tilde
-                    best_delta = cand
-                    any_safe = True
-
-            if not any_safe:
-                golden_ratio = (1 + np.sqrt(5)) / 2
-                best_delta = (current_delta + 2*np.pi * golden_ratio) % (2*np.pi)
-
-            return best_delta, True
-
-    return current_delta, False
+    return new_delta, T_t

@@ -23,7 +23,11 @@ def scan_offset_feasibility(target_weights: np.ndarray, element: ElementData, n_
         sum_amp = 0.0
 
         for n in range(N):
-            best_V, best_c = element.project(rotated_targets[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            res = element.project(rotated_targets[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            if len(res) == 3:
+                best_V, best_c, _ = res
+            else:
+                best_V, best_c = res
             sum_sq_err += np.abs(rotated_targets[n] - best_c)**2
             sum_amp += np.abs(best_c)
             branches[i, n] = best_V
