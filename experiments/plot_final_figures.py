@@ -21,7 +21,7 @@ def plot_metrics(df_main, df_scale):
     # Mappings
     metrics = [
         ('NullDepth', 'Null Depth (dB)', 'Lower is better', axs[0], -40),
-        ('Gain', 'Main-Beam Gain (dB)', 'Higher is better', axs[1], None),
+        ('Gain', 'Normalized Main-Beam Gain (dB)', 'Higher is better (Closer to 0)', axs[1], 0),
         ('PTNR', 'Peak-to-Null Ratio (dB)', 'Higher is better', axs[2], None),
         ('Residual', 'Manifold Projection Residual', 'Lower is better', axs[3], None),
         ('CumulativeFlips', 'Cumulative Branch Flips', 'Stagnation check', axs[4], None)
