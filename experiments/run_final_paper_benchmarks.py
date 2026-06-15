@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.element_model import SyntheticVaractor
 from beamformer.pattern_projection import Task
-from beamformer.synthesis import synthesize_schelkunoff
+from beamformer.synthesis import synthesize_schelkunoff,synthesize_phase_only_lms
 from beamformer.controllers.core import step_ap_lr, apply_phase_jump
 from beamformer.controllers.policies import *
 from beamformer.controllers.metrics import get_metrics
@@ -27,7 +27,7 @@ def run_policy(policy_name, seed, N, T=50):
     task = Task(type='nulled', target_angles=[target_angle], null_angles=nulls, sll_ceiling=0.1)
 
     # Warm initialization
-    w_ideal = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
+    w_ideal = synthesize_phase_only_lms(N, task.target_angles[0], task.null_angles)
 
     V_n = np.zeros(N)
     c_n = np.zeros(N, dtype=np.complex128)
@@ -156,7 +156,7 @@ def run_main_benchmark():
     os.makedirs('experiments/data', exist_ok=True)
 
     policies = ['Policy A', 'Policy B', 'Policy C', 'Policy D', 'Policy E', 'Policy F', 'Policy G']
-    N = 64
+    N = 256
     seeds = 20
     T = 50
 
