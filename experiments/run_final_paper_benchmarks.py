@@ -75,40 +75,62 @@ def run_policy(policy_name, seed, N, T=50):
                     _, _, current_b[n] = res
             b_t_old = current_b
 
-        is_sa = policy_name in ['Policy F', 'Policy G']
+        is_sa = policy_name in ['Simulated Annealing', 'Kinetic SA (Ablation)', 'Gain-Biased SA (Proposed)']
+        is_hc = policy_name == 'Hill Climbing'
 
-        if policy_name == 'Policy A':
+        if policy_name == 'Fixed Baseline':
             propose_delta = best_delta_gain
-        elif policy_name == 'Policy B':
+        elif policy_name == 'Random Basin Hopping':
             propose_delta = policy_B_random(t, delta)
-        elif policy_name == 'Policy C':
+        elif policy_name == 'Periodic Scan':
             propose_delta, scan_idx = policy_C_periodic_scan(t, delta, M, history_null, history_gain, best_delta_null, best_delta_gain, scan_idx, N=N)
-        elif policy_name == 'Policy D':
+        elif policy_name == 'Stagnation Escapement':
             propose_delta = policy_D_stagnation(t, delta, W, history_null, history_gain, history_flips, history_c)
-        elif policy_name == 'Policy E':
+        elif policy_name == 'Probe-Based Diversity':
             current_b = np.zeros(N, dtype=int)
             for n in range(N):
                 res = element.project(c_n[n])
                 if len(res) == 3:
                     _, _, current_b[n] = res
             propose_delta = policy_E_probe(t, delta, W, history_null, history_gain, history_flips, c_n.copy(), V_n.copy(), current_b, element, N, task)
-        elif policy_name == 'Policy F':
+        elif policy_name == 'Simulated Annealing':
             propose_delta, T_t = policy_F_sa_propose(t, delta, T_0)
-        elif policy_name == 'Policy G':
+        elif policy_name == 'Kinetic SA (Ablation)':
             propose_delta, T_t = policy_G_ksa_propose(t, delta, T_0, W, history_c, history_null, history_gain, history_flips)
+        elif policy_name == 'Hill Climbing':
+            propose_delta = (delta + np.random.normal(0, np.deg2rad(15))) % (2*np.pi)
+        elif policy_name == 'Gain-Biased SA (Proposed)':
+            propose_delta, T_t = policy_F_sa_propose(t, delta, T_0)
 
 
-        if is_sa:
+        if is_sa or is_hc:
             # We must evaluate it to decide acceptance
             c_cand, V_cand = apply_phase_jump(c_n.copy(), V_n.copy(), delta, propose_delta, element)
             c_cand, V_cand, _, null_cand, gain_cand, ptnr_cand, _ = step_ap_lr(c_cand, propose_delta, V_cand, task, element)
 
-            E_new = -ptnr_cand
-            E_old = -history_ptnr[-1] if len(history_ptnr) > 0 else 0
+            if policy_name == 'Gain-Biased SA (Proposed)':
+                # Penalize loss of main beam gain heavily
+                target_gain = 20 * np.log10(N)
+                gain_loss_new = target_gain - gain_cand
+                gain_loss_old = target_gain - (history_gain[-1] if len(history_gain) > 0 else target_gain)
+
+                # Biased energy function: PTNR but with extreme exponential penalty if gain drops below 1.5 dB loss
+                penalty_new = np.exp(max(0, gain_loss_new - 1.5) * 2.0) - 1.0
+                penalty_old = np.exp(max(0, gain_loss_old - 1.5) * 2.0) - 1.0
+
+                E_new = -ptnr_cand + penalty_new
+                E_old = -history_ptnr[-1] + penalty_old if len(history_ptnr) > 0 else 0
+            elif policy_name == 'Hill Climbing':
+                E_new = -ptnr_cand
+                E_old = -history_ptnr[-1] if len(history_ptnr) > 0 else 0
+                T_t = 0.0 # Strict acceptance
+            else:
+                E_new = -ptnr_cand
+                E_old = -history_ptnr[-1] if len(history_ptnr) > 0 else 0
 
             if E_new < E_old:
                 delta = propose_delta
-            elif np.random.rand() < np.exp(-(E_new - E_old) / T_t):
+            elif T_t > 1e-6 and np.random.rand() < np.exp(-(E_new - E_old) / T_t):
                 delta = propose_delta
         else:
             delta = propose_delta
@@ -155,7 +177,7 @@ def run_policy(policy_name, seed, N, T=50):
 def run_main_benchmark():
     os.makedirs('experiments/data', exist_ok=True)
 
-    policies = ['Policy A', 'Policy B', 'Policy C', 'Policy D', 'Policy E', 'Policy F', 'Policy G']
+    policies = ['Fixed Baseline', 'Random Basin Hopping', 'Periodic Scan', 'Stagnation Escapement', 'Probe-Based Diversity', 'Simulated Annealing', 'Hill Climbing', 'Gain-Biased SA (Proposed)']
     N = 64
     seeds = 20
     T = 50
@@ -185,7 +207,7 @@ def run_main_benchmark():
     print("Main benchmark completed.")
 
 def run_scaling_benchmark():
-    policies = ['Policy A', 'Policy D', 'Policy E', 'Policy F'] # Subset to save time if needed, or all
+    policies = ['Fixed Baseline', 'Stagnation Escapement', 'Probe-Based Diversity', 'Gain-Biased SA (Proposed)'] # Subset to save time if needed, or all
     Ns = [64, 256, 1024]
     seeds = 3
     T = 10 # Short horizon for scaling

@@ -31,7 +31,11 @@ def run_comprehensive_trial(seed, N, algo_name, B_total=200):
     current_delta = 0.0
     V_n = np.zeros(N)
     for n in range(N):
-        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * current_delta))
+        res = element.project(c_n[n] * np.exp(1j * current_delta))
+        if len(res) == 3:
+            V_n[n], c_n[n], _ = res
+        else:
+            V_n[n], c_n[n] = res
 
     target_gain = 20 * np.log10(N)
 
@@ -94,7 +98,11 @@ def run_comprehensive_trial(seed, N, algo_name, B_total=200):
         c_proj = np.zeros(N, dtype=np.complex128)
 
         for n in range(N):
-            V_cand_proj[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            res = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            if len(res) == 3:
+                V_cand_proj[n], c_proj[n], _ = res
+            else:
+                V_cand_proj[n], c_proj[n] = res
             current_residual += np.abs(rotated_cand[n] - c_proj[n])**2
 
         cand_V = (1 - alpha) * cand_V + alpha * V_cand_proj
@@ -219,7 +227,8 @@ def run_gand_baseline(seed, N, B_total=200):
     init_c = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
     init_V = np.zeros(N)
     for n in range(N):
-        init_V[n], _ = element.project(init_c[n])
+        res = element.project(init_c[n])
+        init_V[n] = res[0]
 
     pop_size = 20
     # Population of branch assignments (voltages)
@@ -332,7 +341,8 @@ def run_pgd_baseline(seed, N, B_total=200):
     for k in range(1, B_total + 1):
         c_n = np.zeros(N, dtype=np.complex128)
         for n in range(N):
-            _, c_n[n] = element.project(np.exp(1j * phases[n]), method='phase_only')
+            res = element.project(np.exp(1j * phases[n]), method='phase_only')
+            c_n[n] = res[1]
 
         grad = np.zeros(N)
         for nu in task.null_angles:

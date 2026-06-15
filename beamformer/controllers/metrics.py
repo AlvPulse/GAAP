@@ -29,10 +29,12 @@ def get_metrics(c_n, task, element, oversample_factor=8):
             target_power.append(power_db[idx])
         main_beam_gain_abs = np.mean(target_power)
 
+    normalized_gain = main_beam_gain_abs - max_ideal_power_db
+
     # PTNR = Gain - Null (in dB)
     ptnr = main_beam_gain_abs - null_depth_abs
 
-    return null_depth_abs, main_beam_gain_abs, ptnr
+    return null_depth_abs, normalized_gain, ptnr
 
 def count_flips(V_curr, V_prev, threshold=2.0):
     if V_prev is None:
