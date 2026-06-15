@@ -51,7 +51,7 @@ def main():
         V_proj = np.zeros(N)
         res = 0.0
         for n in range(N):
-            V_proj[n], c_proj[n] = element.project(rotated_ideal[n], method='phase_only')
+            V_proj[n], c_proj[n], _= element.project(rotated_ideal[n], method='phase_only')
             res += np.abs(rotated_ideal[n] - c_proj[n])**2
 
         # De-rotate for pattern evaluation

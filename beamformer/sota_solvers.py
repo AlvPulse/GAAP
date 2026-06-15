@@ -42,7 +42,7 @@ def proj_manifold(w_ideal, element, N):
     V_opt = np.zeros(N)
     c_opt = np.zeros(N, dtype=np.complex128)
     for n in range(N):
-        V_opt[n], c_opt[n] = element.project(w_ideal[n])
+        V_opt[n], c_opt[n], _= element.project(w_ideal[n])
     return V_opt, c_opt
 
 

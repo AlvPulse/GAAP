@@ -33,7 +33,7 @@ def update_sa_hopping(
     c_cand = np.zeros(N, dtype=np.complex128)
 
     for n in range(N):
-        V_cand[n], c_cand[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        V_cand[n], c_cand[n], _= element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
 
     # Evaluate quick Euclidean cost (or PTNR cost if preferred)
     cost = np.sum(np.abs(rotated_cand - c_cand)**2)
