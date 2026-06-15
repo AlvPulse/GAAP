@@ -35,7 +35,7 @@ def run_showdown_trial(seed, N, algo_name, controller_class, controller_kwargs, 
     current_delta = 0.0
     V_n = np.zeros(N)
     for n in range(N):
-        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * current_delta))
+        V_n[n], c_n[n], _= element.project(c_n[n] * np.exp(1j * current_delta))
 
     controller = controller_class(**controller_kwargs)
 

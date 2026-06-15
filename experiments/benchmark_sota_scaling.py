@@ -27,7 +27,7 @@ def run_pipeline(seed, N, algo_name, B_total=100):
     current_delta = 0.0
     V_n = np.zeros(N)
     for n in range(N):
-        V_n[n], c_n[n] = element.project(c_n[n] * np.exp(1j * current_delta))
+        V_n[n], c_n[n], _= element.project(c_n[n] * np.exp(1j * current_delta))
 
     target_gain = 20 * np.log10(N)
 
@@ -96,7 +96,7 @@ def run_pipeline(seed, N, algo_name, B_total=100):
         c_proj = np.zeros(N, dtype=np.complex128)
 
         for n in range(N):
-            V_cand_proj[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            V_cand_proj[n], c_proj[n], _= element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
             current_residual += np.abs(rotated_cand[n] - c_proj[n])**2
 
         cand_V = (1 - alpha) * cand_V + alpha * V_cand_proj

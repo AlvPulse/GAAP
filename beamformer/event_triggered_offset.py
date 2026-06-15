@@ -91,7 +91,7 @@ def trigger_basin_reselection(
         c_cand = np.zeros(N, dtype=np.complex128)
 
         for n in range(N):
-            V_cand[n], c_cand[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            V_cand[n], c_cand[n], _= element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
 
         # 2. Short-horizon Local Refinement Probe
         if probe_lr_steps > 0 and hasattr(task, 'null_angles') and len(task.null_angles) > 0:
@@ -127,6 +127,6 @@ def trigger_basin_reselection(
         best_candidate_V_n = np.zeros(N)
         for n in range(N):
             # approximate voltage
-            best_candidate_V_n[n], _ = element.project(current_weights[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            best_candidate_V_n[n], _, _= element.project(current_weights[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
 
     return best_candidate_delta, best_candidate_V_n, best_candidate_c_n, changed

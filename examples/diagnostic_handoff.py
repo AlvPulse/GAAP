@@ -119,7 +119,7 @@ def main():
     V_stage0 = np.zeros(N)
     c_stage0 = np.zeros(N, dtype=np.complex128)
     for n in range(N):
-        V_stage0[n], c_stage0[n] = element.project(initial_weights[n] * np.exp(1j * delta))
+        V_stage0[n], c_stage0[n], _= element.project(initial_weights[n] * np.exp(1j * delta))
 
     metrics_stage0 = evaluate_metrics(c_stage0, V_stage0, element, task)
 

@@ -75,7 +75,7 @@ def run_cadence_ablation(schedule, task, element, N, initial_weights):
     V_n = np.zeros(N)
 
     for n in range(N):
-        V_n[n], c_n[n] = element.project(initial_weights[n])
+        V_n[n], c_n[n], _= element.project(initial_weights[n])
 
     history = []
     baseline_branches = None
@@ -101,7 +101,7 @@ def run_cadence_ablation(schedule, task, element, N, initial_weights):
             # Immediately project to new delta geometry
             rotated_cand = c_n * np.exp(1j * delta)
             for n in range(N):
-                V_n[n], c_n[n] = element.project(rotated_cand[n])
+                V_n[n], c_n[n], _= element.project(rotated_cand[n])
 
             af_cache.initialize(c_n) # Re-init cache after big jump
 
@@ -115,7 +115,7 @@ def run_cadence_ablation(schedule, task, element, N, initial_weights):
 
             rotated_cand = c_cand * np.exp(1j * delta)
             for n in range(N):
-                V_n[n], c_n[n] = element.project(rotated_cand[n])
+                V_n[n], c_n[n], _= element.project(rotated_cand[n])
 
             af_cache.initialize(c_n) # Re-init cache after AP jump
 

@@ -67,7 +67,7 @@ def optimize_beam_ap(
         coh_V = np.zeros(N)
         coh_c = np.zeros(N, dtype=np.complex128)
         for n in range(N):
-            coh_V[n], coh_c[n] = element.project(initial_weights[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+            coh_V[n], coh_c[n], _= element.project(initial_weights[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
         logger.log_initial_state(coh_c, coh_V, baseline_weights=baseline_weights)
         logger.log_iteration(delta, float('inf'), c_n, V_n)
 
@@ -232,7 +232,7 @@ def optimize_beam_ap(
 
                         rotated_cand = c_n * np.exp(1j * (new_delta - delta))
                         for n in range(N):
-                            V_n[n], c_n[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+                            V_n[n], c_n[n], _= element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
                         delta = new_delta
                         kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
                         kwargs['last_hop_k'] = k
@@ -287,7 +287,7 @@ def optimize_beam_ap(
                     # Project directly without probe
                     rotated_cand = c_n * np.exp(1j * new_delta)
                     for n in range(N):
-                        V_n[n], c_n[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+                        V_n[n], c_n[n], _= element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
                     delta = new_delta
 
                     kwargs['current_step_size'] = kwargs.get('step_size', 0.05)
