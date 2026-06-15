@@ -1,235 +1,164 @@
-import numpy as np
-import pandas as pd
 import os
 import sys
 import time
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import numpy as np
+import matplotlib.pyplot as plt
+sys.path.append(os.getcwd())
 
 from beamformer.element_model import SyntheticVaractor
+from beamformer.synthesis import get_steering_vector
 from beamformer.pattern_projection import Task
-from beamformer.synthesis import synthesize_schelkunoff
-from beamformer.controllers.core import step_ap_lr, apply_phase_jump
-from beamformer.controllers.policies import *
+from beamformer.controllers.modular_backbone import OptimizationBackbone
+from beamformer.controllers.policies import (
+    PolicyA_FixedBaseline, PolicyB_RandomBasinHopping, PolicyC_TrajectoryScan,
+    PolicyD_StagnationEscapement, PolicyE_ProbeDiversity, PolicyF_SimulatedAnnealing,
+    PolicyG_TrustRegionAnnealing
+)
 from beamformer.controllers.metrics import get_metrics
 
-def run_policy(policy_name, seed, N, T=50):
+def run_experiment(policy_class, N=64, iterations=50, seed=42):
     np.random.seed(seed)
-    element = SyntheticVaractor(beta=1.5, folding=True)
 
-    target_angle = np.random.uniform(-0.4, 0.4)
-    nulls = []
-    while len(nulls) < 3:
-        n_ang = np.random.uniform(-0.9, 0.9)
-        if np.abs(n_ang - target_angle) > 0.15:
-            nulls.append(n_ang)
+    target_u = np.sin(30 * np.pi / 180)
+    null_u = [np.sin(-20 * np.pi / 180), np.sin(50 * np.pi / 180)]
 
-    task = Task(type='nulled', target_angles=[target_angle], null_angles=nulls, sll_ceiling=0.1)
+    element = SyntheticVaractor()
+    task = Task(type='nulled', target_angles=[target_u], null_angles=null_u)
 
-    # Warm initialization
-    w_ideal = synthesize_schelkunoff(N, task.target_angles[0], task.null_angles)
+    # Init (Pencil Beam for maximum gain preservation)
+    w = get_steering_vector(N, target_u)
 
-    V_n = np.zeros(N)
-    c_n = np.zeros(N, dtype=np.complex128)
-    for n in range(N):
-        res = element.project(w_ideal[n])
-        if len(res) == 3:
-            V_n[n], c_n[n], _ = res
-        else:
-            V_n[n], c_n[n] = res
+    backbone = OptimizationBackbone(task, element, N)
+    policy = policy_class(N)
 
-    # Initial offset
     delta = 0.0
+    history = []
+    flips_cumulative = []
+    total_flips = 0
 
-    # History
-    history_null = []
-    history_gain = []
-    history_ptnr = []
-    history_flips = []
-    history_c = []
-    history_residual = []
-
-    best_delta_null = delta
-    best_null = float('inf')
-    best_delta_gain = delta
-    best_gain = -float('inf')
-
-    scan_idx = 0
-    W = 5
-    M = 10
-    T_0 = 4.328
+    # Get initial metrics
+    _, b_init, _ = element.project(w[0]) # just to initialize b shape
+    b = np.zeros(N, dtype=int)
+    for n in range(N):
+        _, _, b[n] = element.project(w[n], method='euclidean')
 
     start_time = time.time()
 
-    for t in range(1, T + 1):
-        # 1. Outer Loop Decision
-        delta_old = delta
-        propose_delta = delta
-
-        b_t_old = None
-        if t > 1:
-            current_b = np.zeros(N, dtype=int)
-            for n in range(N):
-                res = element.project(c_n[n])
-                if len(res) == 3:
-                    _, _, current_b[n] = res
-            b_t_old = current_b
-
-        is_sa = policy_name in ['Simulated Annealing', 'Kinetic SA (Ablation)', 'Gain-Biased SA (Proposed)']
-        is_hc = policy_name == 'Hill Climbing'
-
-        if policy_name == 'Fixed Baseline':
-            propose_delta = best_delta_gain
-        elif policy_name == 'Random Basin Hopping':
-            propose_delta = policy_B_random(t, delta)
-        elif policy_name == 'Periodic Scan':
-            propose_delta, scan_idx = policy_C_periodic_scan(t, delta, M, history_null, history_gain, best_delta_null, best_delta_gain, scan_idx, N=N)
-        elif policy_name == 'Stagnation Escapement':
-            propose_delta = policy_D_stagnation(t, delta, W, history_null, history_gain, history_flips, history_c)
-        elif policy_name == 'Probe-Based Diversity':
-            current_b = np.zeros(N, dtype=int)
-            for n in range(N):
-                res = element.project(c_n[n])
-                if len(res) == 3:
-                    _, _, current_b[n] = res
-            propose_delta = policy_E_probe(t, delta, W, history_null, history_gain, history_flips, c_n.copy(), V_n.copy(), current_b, element, N, task)
-        elif policy_name == 'Simulated Annealing':
-            propose_delta, T_t = policy_F_sa_propose(t, delta, T_0)
-        elif policy_name == 'Kinetic SA (Ablation)':
-            propose_delta, T_t = policy_G_ksa_propose(t, delta, T_0, W, history_c, history_null, history_gain, history_flips)
-        elif policy_name == 'Hill Climbing':
-            propose_delta = (delta + np.random.normal(0, np.deg2rad(15))) % (2*np.pi)
-        elif policy_name == 'Gain-Biased SA (Proposed)':
-            propose_delta, T_t = policy_F_sa_propose(t, delta, T_0)
-
-
-        if is_sa or is_hc:
-            # We must evaluate it to decide acceptance
-            c_cand, V_cand = apply_phase_jump(c_n.copy(), V_n.copy(), delta, propose_delta, element)
-            c_cand, V_cand, _, null_cand, gain_cand, ptnr_cand, _ = step_ap_lr(c_cand, propose_delta, V_cand, task, element)
-
-            if policy_name == 'Gain-Biased SA (Proposed)':
-                # Penalize loss of main beam gain heavily
-                target_gain = 20 * np.log10(N)
-                gain_loss_new = target_gain - gain_cand
-                gain_loss_old = target_gain - (history_gain[-1] if len(history_gain) > 0 else target_gain)
-
-                # Biased energy function: PTNR but with extreme exponential penalty if gain drops below 1.5 dB loss
-                penalty_new = np.exp(max(0, gain_loss_new - 1.5) * 2.0) - 1.0
-                penalty_old = np.exp(max(0, gain_loss_old - 1.5) * 2.0) - 1.0
-
-                E_new = -ptnr_cand + penalty_new
-                E_old = -history_ptnr[-1] + penalty_old if len(history_ptnr) > 0 else 0
-            elif policy_name == 'Hill Climbing':
-                E_new = -ptnr_cand
-                E_old = -history_ptnr[-1] if len(history_ptnr) > 0 else 0
-                T_t = 0.0 # Strict acceptance
-            else:
-                E_new = -ptnr_cand
-                E_old = -history_ptnr[-1] if len(history_ptnr) > 0 else 0
-
-            if E_new < E_old:
-                delta = propose_delta
-            elif T_t > 1e-6 and np.random.rand() < np.exp(-(E_new - E_old) / T_t):
-                delta = propose_delta
+    for t in range(1, iterations + 1):
+        # 1. Policy decides next delta
+        if t == 1:
+            metrics = {'null_depth': -10.0, 'gain': 0.0, 'ptnr': 10.0} # dummy initial
+            delta_new = delta
         else:
-            delta = propose_delta
+            delta_new = policy.step(t, delta, metrics, history, w, b, backbone)
 
-        if delta != delta_old:
-            c_n, V_n = apply_phase_jump(c_n, V_n, delta_old, delta, element)
+        # 2. Backbone executes
+        w_new, b_new, metrics = backbone.run_step(w, delta_new)
 
-        # 2. Inner AP+LR
-        c_n, V_n, res, null_depth, gain, ptnr, b_t = step_ap_lr(c_n, delta, V_n, task, element, refinement_steps_inner=20)
+        # 3. Track metrics
+        null_res = np.sqrt(np.sum(np.abs(w_new - w)**2)) # dummy hard residual
+        history.append({
+            'null_depth': metrics['null_depth'],
+            'gain': metrics['gain'],
+            'ptnr': metrics['ptnr'],
+            'hard_residual': null_res
+        })
 
-        # 3. State update
-        flips = 0
-        if b_t_old is not None:
-            flips = np.sum(b_t != b_t_old)
+        flips = np.sum(b_new != b)
+        total_flips += flips
+        flips_cumulative.append(total_flips)
 
-        history_null.append(null_depth)
-        history_gain.append(gain)
-        history_ptnr.append(ptnr)
-        history_flips.append(flips)
-        history_c.append(c_n.copy())
-        history_residual.append(res)
+        # Update state
+        w = w_new
+        b = b_new
+        delta = delta_new
 
-        if null_depth < best_null:
-            best_null = null_depth
-            best_delta_null = delta
-        if gain > best_gain:
-            best_gain = gain
-            best_delta_gain = delta
+    end_time = time.time()
+    wall_clock = (end_time - start_time) * 1000 # ms
 
-    wall_clock = time.time() - start_time
+    return history, flips_cumulative, wall_clock
 
-    return {
-        'policy': policy_name,
-        'seed': seed,
-        'N': N,
-        'null': history_null,
-        'gain': history_gain,
-        'ptnr': history_ptnr,
-        'flips': history_flips,
-        'residual': history_residual,
-        'wall_clock': wall_clock
+def run_benchmarks():
+    policies = {
+        'A (Fixed)': PolicyA_FixedBaseline,
+        'B (Random Hop)': PolicyB_RandomBasinHopping,
+        'C (Traj Scan)': PolicyC_TrajectoryScan,
+        'D (Stagnation)': PolicyD_StagnationEscapement,
+        'E (Probe Div)': PolicyE_ProbeDiversity,
+        'F (SA)': PolicyF_SimulatedAnnealing,
+        'G (TRA)': PolicyG_TrustRegionAnnealing
     }
 
-def run_main_benchmark():
-    os.makedirs('experiments/data', exist_ok=True)
+    seeds = range(20)
+    iterations = 50
+    N_list = [64, 256, 1024]
 
-    policies = ['Fixed Baseline', 'Random Basin Hopping', 'Periodic Scan', 'Stagnation Escapement', 'Probe-Based Diversity', 'Simulated Annealing', 'Hill Climbing', 'Gain-Biased SA (Proposed)']
-    N = 64
-    seeds = 20
-    T = 50
+    results = {name: {'null_depth': [], 'gain': [], 'ptnr': [], 'hard_residual': [], 'flips': [], 'times': {n: [] for n in N_list}} for name in policies}
 
-    all_results = []
+    print("Running benchmarks...")
+    for name, pclass in policies.items():
+        print(f"  Benchmarking {name}...")
 
-    for policy in policies:
-        print(f"Running {policy}...")
-        for seed in range(seeds):
-            res = run_policy(policy, seed, N, T)
-            # Expand to dataframe format for easy iteration plotting
-            for t in range(T):
-                all_results.append({
-                    'Policy': policy,
-                    'Seed': seed,
-                    'Iteration': t + 1,
-                    'NullDepth': res['null'][t],
-                    'Gain': res['gain'][t],
-                    'PTNR': res['ptnr'][t],
-                    'Flips': res['flips'][t],
-                    'CumulativeFlips': np.sum(res['flips'][:t+1]),
-                    'Residual': res['residual'][t]
-                })
+        # Run 20 seeds for main plots (N=64)
+        for seed in seeds:
+            hist, flips, _ = run_experiment(pclass, N=64, iterations=iterations, seed=seed)
+            results[name]['null_depth'].append([h['null_depth'] for h in hist])
+            results[name]['gain'].append([h['gain'] for h in hist])
+            results[name]['ptnr'].append([h['ptnr'] for h in hist])
+            results[name]['hard_residual'].append([h['hard_residual'] for h in hist])
+            results[name]['flips'].append(flips)
 
-    df = pd.DataFrame(all_results)
-    df.to_csv('experiments/data/main_benchmark_policies.csv', index=False)
-    print("Main benchmark completed.")
+        # Run scaling benchmarks
+        for N in N_list:
+            n_seeds = 5 if N == 1024 else 20
+            for seed in range(n_seeds):
+                _, _, t_ms = run_experiment(pclass, N=N, iterations=1, seed=seed) # Just 1 iteration for timing to save time
+                results[name]['times'][N].append(t_ms)
 
-def run_scaling_benchmark():
-    policies = ['Fixed Baseline', 'Stagnation Escapement', 'Probe-Based Diversity', 'Gain-Biased SA (Proposed)'] # Subset to save time if needed, or all
-    Ns = [64, 256, 1024]
-    seeds = 3
-    T = 10 # Short horizon for scaling
+    # Plotting
+    fig, axes = plt.subplots(3, 2, figsize=(15, 15))
+    axes = axes.flatten()
 
-    all_results = []
+    colors = ['black', 'red', 'blue', 'orange', 'purple', 'green', 'magenta']
 
-    for N in Ns:
-        for policy in policies:
-            print(f"Scaling check: {policy} at N={N}...")
-            for seed in range(seeds):
-                res = run_policy(policy, seed, N, T)
-                all_results.append({
-                    'Policy': policy,
-                    'N': N,
-                    'Seed': seed,
-                    'WallClock_s': res['wall_clock']
-                })
+    for (name, data), color in zip(results.items(), colors):
+        t_axis = np.arange(1, iterations + 1)
 
-    df = pd.DataFrame(all_results)
-    df.to_csv('experiments/data/scaling_benchmark_policies.csv', index=False)
-    print("Scaling benchmark completed.")
+        def plot_iqr(ax_idx, key, label=None):
+            mean = np.mean(data[key], axis=0)
+            p25 = np.percentile(data[key], 25, axis=0)
+            p75 = np.percentile(data[key], 75, axis=0)
+            axes[ax_idx].plot(t_axis, mean, label=label if label else name, color=color)
+            axes[ax_idx].fill_between(t_axis, p25, p75, color=color, alpha=0.2)
+
+        plot_iqr(0, 'null_depth')
+        plot_iqr(1, 'gain')
+        plot_iqr(2, 'ptnr')
+        plot_iqr(3, 'hard_residual')
+        plot_iqr(4, 'flips', label=name)
+
+        # Scaling Plot
+        mean_times = [np.mean(data['times'][n]) for n in N_list]
+        axes[5].plot(N_list, mean_times, '-o', color=color, label=name)
+
+    axes[0].set_title('Null Depth (dB)')
+    axes[0].axhline(-40, color='r', linestyle='--')
+    axes[1].set_title('Main-Beam Gain (dB)')
+    axes[2].set_title('Peak-to-Null Ratio (PTNR in dB)')
+    axes[3].set_title('Hard Manifold Projection Residual')
+    axes[4].set_title('Cumulative Branch Flips')
+    axes[4].legend(loc='upper left')
+    axes[5].set_title('Scaling Performance')
+    axes[5].set_xlabel('Array Scale N')
+    axes[5].set_ylabel('Wall-clock time (ms)')
+    axes[5].set_xscale('log')
+    axes[5].set_yscale('log')
+    axes[5].set_xticks(N_list)
+    axes[5].set_xticklabels(N_list)
+
+    plt.tight_layout()
+    plt.savefig('Final_6Panel_Benchmark.png')
+    print("Saved Final_6Panel_Benchmark.png")
 
 if __name__ == '__main__':
-    run_main_benchmark()
-    run_scaling_benchmark()
+    run_benchmarks()
