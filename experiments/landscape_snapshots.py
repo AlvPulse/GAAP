@@ -18,7 +18,7 @@ def sweep_landscape(c_curr, V_curr, delta_curr, task, element, N, num_points=50)
 
     for cand_delta in deltas:
         cand_c, cand_V = apply_phase_jump(c_curr, V_curr, delta_curr, cand_delta, element)
-        res_c, res_V, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=0.05, refinement_steps_inner=20)
+        res_c, res_V, _, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=0.05, refinement_steps_inner=20)
         null_depth, gain, ptnr = get_metrics(res_c, task, element)
 
         ptnrs.append(ptnr)
@@ -61,7 +61,7 @@ def run_landscape_snapshots():
             }
 
         # Evolve state 1 step
-        c_curr, V_curr, _ = step_ap_lr(c_curr, current_delta, V_curr, task, element, step_size=0.05, refinement_steps_inner=20)
+        c_curr, V_curr, _, _ = step_ap_lr(c_curr, current_delta, V_curr, task, element, step_size=0.05, refinement_steps_inner=20)
 
     # Plotting
     fig, axs = plt.subplots(3, 1, figsize=(10, 12), sharex=True)

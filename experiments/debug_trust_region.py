@@ -10,7 +10,7 @@ from beamformer.pattern_projection import Task
 from beamformer.synthesis import synthesize_schelkunoff
 from beamformer.controllers.core import step_ap_lr, apply_phase_jump
 from beamformer.controllers.metrics import get_metrics
-from beamformer.controllers.sa_families import SA
+from beamformer.controllers.sa_families import SA, CROA
 from beamformer.controllers.trust_region import TR_HC, TR_SA
 
 def run_tr_comparison(seed, N, controller_class, B_total=100):
@@ -30,39 +30,84 @@ def run_tr_comparison(seed, N, controller_class, B_total=100):
 
     controller = controller_class()
 
-    c_n, V_n, res = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=0.05)
+    c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=0.05)
     _, _, current_ptnr = get_metrics(c_n, task, element)
     current_cost = -current_ptnr
 
     best_c, best_V, best_delta = c_n.copy(), V_n.copy(), current_delta
 
+    lr_initial = 0.05
+    lr_step = lr_initial
+    lr_min = 0.001
+    lr_max = 0.2
+
+    history_res = [res]
+
     history = {
         'ptnr': [current_ptnr],
         'deltas': [current_delta],
-        'TR_size': [getattr(controller, 'TR', getattr(controller, 'sigma', np.pi/12))]
+        'TR_size': [getattr(controller, 'TR', getattr(controller, 'sigma', np.pi/12))],
+        'lr_steps': [lr_step]
     }
 
     for t in range(1, B_total + 1):
         cand_delta = controller.propose(current_delta)
+        delta_diff = min(np.abs(cand_delta - current_delta), 2*np.pi - np.abs(cand_delta - current_delta))
 
         cand_c, cand_V = apply_phase_jump(best_c, best_V, best_delta, cand_delta, element)
-        cand_c, cand_V, cand_res = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=0.05)
+        cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
 
         _, _, ptnr = get_metrics(cand_c, task, element)
         cand_cost = -ptnr
 
         accepted = controller.accept(current_cost, cand_cost)
 
+
+        # Calculate diff before state variables update
+        old_delta = current_delta
+
         if accepted:
-            current_delta = cand_delta
             current_cost = cand_cost
             best_c, best_V, best_delta = cand_c, cand_V, cand_delta
 
-        controller.update_state(accepted)
+            # Legacy default reset if controller doesn't handle lr_step
+            if not hasattr(controller, 'lr_step'):
+                if delta_diff > 1e-3:
+                    lr_step = lr_initial
+
+        controller.update_state(
+            accepted,
+            history_r=history_res,
+            lr_step=lr_step,
+            lr_min=lr_min,
+            new_cost=cand_cost,
+            current_delta=old_delta,
+            cand_delta=cand_delta,
+            new_res=cand_res,
+            r_target=1e-4,
+            r_0=history_res[0] if history_res else 1.0
+        )
+
+        if accepted:
+            current_delta = cand_delta
+
+        if hasattr(controller, 'lr_step'):
+            lr_step = controller.lr_step
 
         history['ptnr'].append(-current_cost)
         history['deltas'].append(current_delta)
         history['TR_size'].append(getattr(controller, 'TR', getattr(controller, 'sigma', np.pi/12)))
+        history['lr_steps'].append(lr_step)
+
+        history_res.append(cand_res if accepted else history_res[-1])
+
+        if t > 1 and cand_res < history_res[-2]:
+            lr_step = min(lr_step * 1.1, lr_max)
+        else:
+            lr_step = max(lr_step * 0.5, lr_min)
+
+        if hasattr(controller, 'lr_step'):
+            controller.lr_step = lr_step
 
     return history
 

@@ -4,6 +4,8 @@ from beamformer.utils import oversampled_fft, oversampled_ifft
 from beamformer.local_refinement import refine_local_active_set
 from beamformer.incremental_af import IncrementalAFCache
 
+from beamformer.controllers.metrics import get_metrics
+
 def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
                projection_method='euclidean', w_phase=1.0, w_amp=0.5,
                tau=0.7, alpha=0.7, oversample_factor=8, k_active=8, refinement_steps_inner=20):
@@ -17,6 +19,10 @@ def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
       c_n_new: Updated complex weights
       V_n_new: Updated hardware voltages
       residual: Hardware projection residual
+      null_depth: Current Null Depth
+      gain: Main-Beam Gain
+      ptnr: Peak-to-Null Ratio
+      b_t: Discrete branch assignment vector
     """
     N = len(c_n)
 
@@ -33,13 +39,19 @@ def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
 
     current_residual = 0.0
     for n in range(N):
-        V_cand[n], c_proj[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        res = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        if len(res) == 3:
+            V_cand[n], c_proj[n], _ = res
+        else:
+            V_cand[n], c_proj[n] = res
         current_residual += np.abs(rotated_cand[n] - c_proj[n])**2
 
     V_n_new = (1 - alpha) * V_n + alpha * V_cand
 
     # 3. Local Refinement (Micro-LR)
+    accepted_corrections = 0
     if refinement_steps_inner > 0:
+        V_n_pre_lr = V_n_new.copy()
         c_lr_init = np.zeros(N, dtype=np.complex128)
         for n in range(N):
             c_lr_init[n] = element.get_complex_weight(V_n_new[n])
@@ -57,12 +69,22 @@ def step_ap_lr(c_n, delta, V_n, task, element, step_size=0.05,
             step_size=step_size
         )
 
+        # Approximate number of accepted tangent corrections
+        accepted_corrections = np.sum(np.abs(V_n_new - V_n_pre_lr) > 1e-4)
+
     # Final state evaluation
     c_n_new = np.zeros(N, dtype=np.complex128)
+    b_t = np.zeros(N, dtype=int)
     for n in range(N):
         c_n_new[n] = element.get_complex_weight(V_n_new[n])
+        # Retrieve branch id
+        res = element.project(c_n_new[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        if len(res) == 3:
+            _, _, b_t[n] = res
 
-    return c_n_new, V_n_new, current_residual
+    null_depth, gain, ptnr = get_metrics(c_n_new, task, element)
+
+    return c_n_new, V_n_new, current_residual, null_depth, gain, ptnr, b_t
 
 def apply_phase_jump(c_n, V_n, delta_old, delta_new, element, projection_method='euclidean', w_phase=1.0, w_amp=0.5):
     """
@@ -79,6 +101,10 @@ def apply_phase_jump(c_n, V_n, delta_old, delta_new, element, projection_method=
     c_new = np.zeros(N, dtype=np.complex128)
 
     for n in range(N):
-        V_new[n], c_new[n] = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        res = element.project(rotated_cand[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        if len(res) == 3:
+            V_new[n], c_new[n], _ = res
+        else:
+            V_new[n], c_new[n] = res
 
     return c_new, V_new

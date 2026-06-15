@@ -74,7 +74,7 @@ def run_single_seed(seed, N, policy_name, T=50, W=5):
         prev_c = c_n.copy()
         prev_V = V_n.copy()
 
-        c_n, V_n, res = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step, refinement_steps_inner=20)
+        c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step, refinement_steps_inner=20)
 
         # 2. Metrics
         null_depth, gain, ptnr = get_metrics(c_n, task, element)
@@ -124,7 +124,7 @@ def run_single_seed(seed, N, policy_name, T=50, W=5):
 
             # Evaluate acceptance immediately
             cand_c, cand_V = apply_phase_jump(c_n, V_n, current_delta, cand_delta, element)
-            cand_c, cand_V, cand_res = step_ap_lr(cand_c, cand_delta, cand_V, task, element, refinement_steps_inner=20)
+            cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, refinement_steps_inner=20)
             _, _, cand_ptnr = get_metrics(cand_c, task, element)
             cand_ptnr_cost = -cand_ptnr
 

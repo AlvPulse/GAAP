@@ -38,3 +38,22 @@ def count_flips(V_curr, V_prev, threshold=2.0):
     if V_prev is None:
         return 0
     return np.sum(np.abs(V_curr - V_prev) > threshold)
+
+def get_sll(c_n, task, oversample_factor=8):
+    """
+    Safely calculates the Side Lobe Level (SLL) in dB relative to the peak array factor.
+    Returns absolute max SLL level found outside the main beam region.
+    """
+    N = len(c_n)
+    u_grid, F = oversampled_fft(c_n, oversample_factor)
+    power_db = 20 * np.log10(np.abs(F) + 1e-12)
+
+    # Mask out the main beam (assume roughly +/- 0.1 around targets)
+    mask = np.ones_like(u_grid, dtype=bool)
+    if task.target_angles:
+        for angle in task.target_angles:
+            mask &= (np.abs(u_grid - angle) > 0.15)
+
+    if np.any(mask):
+        return np.max(power_db[mask])
+    return -float('inf')

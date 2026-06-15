@@ -33,7 +33,7 @@ def run_deep_dive(seed, N, controller_class, B_total=100):
     lr_min = 0.001
     lr_max = 0.2
 
-    c_n, V_n, res = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
+    c_n, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
     _, _, current_ptnr = get_metrics(c_n, task, element)
     current_cost = -current_ptnr
 
@@ -51,15 +51,18 @@ def run_deep_dive(seed, N, controller_class, B_total=100):
         delta_diff = min(np.abs(cand_delta - current_delta), 2*np.pi - np.abs(cand_delta - current_delta))
 
         cand_c, cand_V = apply_phase_jump(best_c, best_V, best_delta, cand_delta, element)
-        cand_c, cand_V, cand_res = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
+        cand_c, cand_V, cand_res, _ = step_ap_lr(cand_c, cand_delta, cand_V, task, element, step_size=lr_step)
 
         _, _, ptnr = get_metrics(cand_c, task, element)
         cand_cost = -ptnr
 
         accepted = controller.accept(current_cost, cand_cost)
 
+
+        # Calculate diff before state variables update
+        old_delta = current_delta
+
         if accepted:
-            current_delta = cand_delta
             current_cost = cand_cost
             best_c, best_V, best_delta = cand_c, cand_V, cand_delta
 
@@ -75,12 +78,15 @@ def run_deep_dive(seed, N, controller_class, B_total=100):
             lr_step=lr_step,
             lr_min=lr_min,
             new_cost=cand_cost,
-            current_delta=current_delta,
+            current_delta=old_delta,
             cand_delta=cand_delta,
             new_res=cand_res,
             r_target=1e-4,
             r_0=history_res[0] if history_res else 1.0
         )
+
+        if accepted:
+            current_delta = cand_delta
 
         if hasattr(controller, 'lr_step'):
             lr_step = controller.lr_step
@@ -124,7 +130,7 @@ def plot_croa_comparison():
     axs[1].plot(iterations, sa['deltas'], label='Classical SA', marker='.')
     axs[1].plot(iterations, htroa['deltas'], label='HT-ROA', marker='.')
     axs[1].plot(iterations, croa['deltas'], label='CROA', marker='.')
-    axs[1].set_ylabel('Offset $\\\\delta$ (rad)')
+    axs[1].set_ylabel('Offset delta (rad)')
     axs[1].set_title('Offset Phase Trajectories')
     axs[1].legend()
     axs[1].grid(True)
@@ -132,7 +138,7 @@ def plot_croa_comparison():
     axs[2].plot(iterations, sa['lr_steps'], label='Classical SA (Hard Resets)', marker='.')
     axs[2].plot(iterations, htroa['lr_steps'], label='HT-ROA (Hard Resets)', marker='.')
     axs[2].plot(iterations, croa['lr_steps'], label='CROA (Soft Reannealing)', marker='.')
-    axs[2].set_ylabel('LR Step Size $\\\\alpha$')
+    axs[2].set_ylabel('LR Step Size alpha')
     axs[2].set_xlabel('Iteration')
     axs[2].set_title('Inner Optimizer Memory Tracking')
     axs[2].legend()

@@ -28,6 +28,10 @@ def optimize_offset_only(target_weights: np.ndarray, element: ElementData, n_ste
     best_c_n = np.zeros(N, dtype=np.complex128)
 
     for n in range(N):
-        best_V_n[n], best_c_n[n] = element.project(rotated_targets[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        res = element.project(rotated_targets[n], method=projection_method, w_phase=w_phase, w_amp=w_amp)
+        if len(res) == 3:
+            best_V_n[n], best_c_n[n], _ = res
+        else:
+            best_V_n[n], best_c_n[n] = res
 
     return best_delta, best_c_n, best_V_n
