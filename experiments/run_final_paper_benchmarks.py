@@ -22,7 +22,7 @@ def run_experiment(policy_class, N=64, iterations=50, seed=42):
     target_u = np.sin(30 * np.pi / 180)
     null_u = [np.sin(-20 * np.pi / 180), np.sin(50 * np.pi / 180)]
 
-    element = SyntheticVaractor()
+    element = SyntheticVaractor(beta=0.9, folding=False)
     task = Task(type='nulled', target_angles=[target_u], null_angles=null_u)
 
     # Init (Pencil Beam for maximum gain preservation)

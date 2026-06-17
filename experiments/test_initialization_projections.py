@@ -25,7 +25,7 @@ def run_trial(init_method, proj_method, N=64, T=30, seed=42):
     null_u = [np.sin(-20 * np.pi / 180), np.sin(50 * np.pi / 180)]
 
     task = Task(type='nulled', target_angles=[target_u], null_angles=null_u)
-    element = SyntheticVaractor(beta=1.5, folding=True)
+    element = SyntheticVaractor(beta=0.8, folding=False)
 
     # 1. Initialization
     if init_method == 'Schelkunoff':

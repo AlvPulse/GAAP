@@ -48,7 +48,7 @@ class OptimizationBackbone:
             # Step 2: Manifold Realignment
             w_realigned = np.zeros_like(w_rot)
             for n in range(self.N):
-                _, w_realigned[n], _ = self.element.project(w_rot[n], method='euclidean')
+                _, w_realigned[n], _ = self.element.project(w_rot[n], method='weighted')
 
             w = w_realigned
 
@@ -79,7 +79,7 @@ class OptimizationBackbone:
         # Determine branches
         b_new = np.zeros(self.N, dtype=int)
         for n in range(self.N):
-            _, _, b_new[n] = self.element.project(c_n[n], method='euclidean')
+            _, _, b_new[n] = self.element.project(c_n[n], method='weighted')
 
         # Get metrics
         from beamformer.controllers.metrics import get_metrics
@@ -128,7 +128,7 @@ class OptimizationBackbone:
 
         b_new = np.zeros(self.N, dtype=int)
         for n in range(self.N):
-            _, _, b_new[n] = self.element.project(c_n[n], method='euclidean')
+            _, _, b_new[n] = self.element.project(c_n[n], method='weighted')
 
         from beamformer.controllers.metrics import get_metrics
         null_db, gain_db, ptnr_db = get_metrics(c_n, self.task, self.element)
