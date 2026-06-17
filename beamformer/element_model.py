@@ -65,12 +65,17 @@ class SyntheticVaractor(ElementData):
         """
         if method == 'euclidean':
             distances = np.abs(self.c_grid - target_weight)
-        elif method == 'phase_only':
+        elif method == 'phase_only' or method == 'phase_dominant':
             target_phase = np.angle(target_weight)
             grid_phase = np.angle(self.c_grid)
             # Shortest angular distance
             phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
             distances = np.abs(phase_diff)
+        elif method == 'gain_steering_weighted':
+            # Maximize the inner product Re(w_n * c_n(s)^*)
+            # Minimizing the negative inner product
+            inner_product = np.real(target_weight * np.conj(self.c_grid))
+            distances = -inner_product
         elif method == 'weighted':
             target_phase = np.angle(target_weight)
             target_amp = np.abs(target_weight)
@@ -80,6 +85,18 @@ class SyntheticVaractor(ElementData):
             phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
             amp_diff = np.abs(grid_amp - target_amp)
             distances = w_phase * phase_diff + w_amp * amp_diff
+        elif method == 'hardware_coupled':
+            # V_n = argmin ( |c_n(s) - w_n|^2 + alpha * Gain_Loss_Penalty(s) )
+            # Gain_Loss_Penalty is (1 - |c_n(s)|)^2
+            alpha = w_amp # we'll map preserve_gain_weight to w_amp, but we will assume default 0.5 if not passed
+            dist_sq = np.abs(self.c_grid - target_weight)**2
+            gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
+            distances = dist_sq + alpha * gain_loss_penalty
+        elif method == 'phase_only_match':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
         else:
             raise ValueError(f"Unknown projection method: {method}")
 
@@ -100,11 +117,14 @@ class IdealElement(ElementData):
     def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         if method == 'euclidean':
             distances = np.abs(self.c_grid - target_weight)
-        elif method == 'phase_only':
+        elif method == 'phase_only' or method == 'phase_dominant':
             target_phase = np.angle(target_weight)
             grid_phase = np.angle(self.c_grid)
             phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
             distances = np.abs(phase_diff)
+        elif method == 'gain_steering_weighted':
+            inner_product = np.real(target_weight * np.conj(self.c_grid))
+            distances = -inner_product
         elif method == 'weighted':
             target_phase = np.angle(target_weight)
             target_amp = np.abs(target_weight)
@@ -114,6 +134,18 @@ class IdealElement(ElementData):
             phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
             amp_diff = np.abs(grid_amp - target_amp)
             distances = w_phase * phase_diff + w_amp * amp_diff
+        elif method == 'hardware_coupled':
+            # V_n = argmin ( |c_n(s) - w_n|^2 + alpha * Gain_Loss_Penalty(s) )
+            # Gain_Loss_Penalty is (1 - |c_n(s)|)^2
+            alpha = w_amp # we'll map preserve_gain_weight to w_amp, but we will assume default 0.5 if not passed
+            dist_sq = np.abs(self.c_grid - target_weight)**2
+            gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
+            distances = dist_sq + alpha * gain_loss_penalty
+        elif method == 'phase_only_match':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
         else:
             raise ValueError(f"Unknown projection method: {method}")
 
@@ -178,11 +210,14 @@ class MeasuredVaractor(ElementData):
     def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
         if method == 'euclidean':
             distances = np.abs(self.c_grid - target_weight)
-        elif method == 'phase_only':
+        elif method == 'phase_only' or method == 'phase_dominant':
             target_phase = np.angle(target_weight)
             grid_phase = np.angle(self.c_grid)
             phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
             distances = np.abs(phase_diff)
+        elif method == 'gain_steering_weighted':
+            inner_product = np.real(target_weight * np.conj(self.c_grid))
+            distances = -inner_product
         elif method == 'weighted':
             target_phase = np.angle(target_weight)
             target_amp = np.abs(target_weight)
@@ -192,6 +227,18 @@ class MeasuredVaractor(ElementData):
             phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
             amp_diff = np.abs(grid_amp - target_amp)
             distances = w_phase * phase_diff + w_amp * amp_diff
+        elif method == 'hardware_coupled':
+            # V_n = argmin ( |c_n(s) - w_n|^2 + alpha * Gain_Loss_Penalty(s) )
+            # Gain_Loss_Penalty is (1 - |c_n(s)|)^2
+            alpha = w_amp # we'll map preserve_gain_weight to w_amp, but we will assume default 0.5 if not passed
+            dist_sq = np.abs(self.c_grid - target_weight)**2
+            gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
+            distances = dist_sq + alpha * gain_loss_penalty
+        elif method == 'phase_only_match':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
         else:
             raise ValueError(f"Unknown projection method: {method}")
 
