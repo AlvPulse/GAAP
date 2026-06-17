@@ -2,21 +2,22 @@ import os
 import sys
 import time
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 sys.path.append(os.getcwd())
 
 from beamformer.element_model import SyntheticVaractor
 from beamformer.synthesis import get_steering_vector
 from beamformer.pattern_projection import Task
-from beamformer.controllers.modular_backbone import OptimizationBackbone
-from beamformer.controllers.policies import (
-    PolicyA_FixedBaseline, PolicyB_RandomBasinHopping, PolicyC_TrajectoryScan,
-    PolicyD_StagnationEscapement, PolicyE_ProbeDiversity, PolicyF_SimulatedAnnealing,
-    PolicyG_TrustRegionAnnealing
-)
+from beamformer.controllers.modular_backbone import OptimizationBackbone, BackboneConfig
+from beamformer.controllers.policies import PolicyA_FixedBaseline
 from beamformer.controllers.metrics import get_metrics
 
-def run_experiment(policy_class, N=64, iterations=50, seed=42):
+# Store autopsy records
+AUTOPSY_RECORDS = []
+
+def run_experiment(config_dict, N=64, iterations=50, seed=42):
     np.random.seed(seed)
 
     target_u = np.sin(30 * np.pi / 180)
@@ -26,139 +27,147 @@ def run_experiment(policy_class, N=64, iterations=50, seed=42):
     task = Task(type='nulled', target_angles=[target_u], null_angles=null_u)
 
     # Init (Pencil Beam for maximum gain preservation)
-    w = get_steering_vector(N, target_u)
+    w_init = get_steering_vector(N, target_u)
 
-    backbone = OptimizationBackbone(task, element, N)
-    policy = policy_class(N)
+    backbone_config = BackboneConfig(
+        projection_type=config_dict['projection_type'],
+        lr_call_frequency=config_dict['lr_call_frequency'],
+        lr_active_set_size=8,
+        lr_step_size_init=1e-3,
+        preserve_gain_weight=config_dict['preserve_gain_weight']
+    )
+    backbone = OptimizationBackbone(task, element, N, config=backbone_config)
+    policy = PolicyA_FixedBaseline(N)
 
     delta = 0.0
     history = []
-    flips_cumulative = []
-    total_flips = 0
 
     # Get initial metrics
-    _, b_init, _ = element.project(w[0]) # just to initialize b shape
     b = np.zeros(N, dtype=int)
     for n in range(N):
-        _, _, b[n] = element.project(w[n], method='euclidean')
+        _, _, b[n] = element.project(w_init[n], method=config_dict['projection_type'])
+
+    # Prepare autopsy logic
+    def create_autopsy_callback(seed, config_str, element, task):
+        def autopsy_callback(step_name, w_current):
+            null_db, gain_db, ptnr_db = get_metrics(w_current, task, element)
+            AUTOPSY_RECORDS.append({
+                'Seed': seed,
+                'Config': config_str,
+                'Step': step_name,
+                'Gain': gain_db,
+                'Null_Depth': null_db,
+                'PTNR': ptnr_db
+            })
+        return autopsy_callback
+
+    config_str = f"{config_dict['projection_type']}_lr{config_dict['lr_call_frequency']}_pgw{config_dict['preserve_gain_weight']}"
+    autopsy_cb = create_autopsy_callback(seed, config_str, element, task)
+
+    # Log Initial Ideal Weights (Iteration 1 only)
+    autopsy_cb('Initial Ideal Weights', w_init)
+
+    # Log Post-Initial Hardware Projection
+    w_hard = np.zeros(N, dtype=np.complex128)
+    for n in range(N):
+        _, w_hard[n], _ = element.project(w_init[n], method=config_dict['projection_type'])
+    autopsy_cb('Post-Initial Hardware Projection', w_hard)
+
+    w = w_hard
 
     start_time = time.time()
 
     for t in range(1, iterations + 1):
-        # 1. Policy decides next delta
         if t == 1:
-            metrics = {'null_depth': -10.0, 'gain': 0.0, 'ptnr': 10.0} # dummy initial
+            metrics = {'null_depth': -10.0, 'gain': 0.0, 'ptnr': 10.0}
             delta_new = delta
+            # Let's say offset controller applies 0 delta.
+            # Post-Offset Controller Application is effectively the same as w_hard for FixedBaseline,
+            # but we log it for completeness.
+            autopsy_cb('Post-Offset Controller Application', w)
         else:
             delta_new = policy.step(t, delta, metrics, history, w, b, backbone)
 
         # 2. Backbone executes
-        w_new, b_new, metrics = backbone.run_step(w, delta_new)
+        # We pass autopsy callback only on t=1
+        w_new, b_new, metrics = backbone.run_step(
+            w, delta_new, t=t,
+            autopsy_callback=autopsy_cb if t == 1 else None
+        )
 
-        # 3. Track metrics
-        null_res = np.sqrt(np.sum(np.abs(w_new - w)**2)) # dummy hard residual
         history.append({
             'null_depth': metrics['null_depth'],
             'gain': metrics['gain'],
-            'ptnr': metrics['ptnr'],
-            'hard_residual': null_res
+            'ptnr': metrics['ptnr']
         })
 
-        flips = np.sum(b_new != b)
-        total_flips += flips
-        flips_cumulative.append(total_flips)
-
-        # Update state
         w = w_new
         b = b_new
         delta = delta_new
 
     end_time = time.time()
-    wall_clock = (end_time - start_time) * 1000 # ms
 
-    return history, flips_cumulative, wall_clock
+    return history
 
 def run_benchmarks():
-    policies = {
-        'A (Fixed)': PolicyA_FixedBaseline,
-        'B (Random Hop)': PolicyB_RandomBasinHopping,
-        'C (Traj Scan)': PolicyC_TrajectoryScan,
-        'D (Stagnation)': PolicyD_StagnationEscapement,
-        'E (Probe Div)': PolicyE_ProbeDiversity,
-        'F (SA)': PolicyF_SimulatedAnnealing,
-        'G (TRA)': PolicyG_TrustRegionAnnealing
+    sweep_grid = {
+        "projection_type": ["hardware_coupled", "phase_only_match"],
+        "lr_call_frequency": [1, 2, 5],
+        "preserve_gain_weight": [0.1, 0.5, 0.9]
     }
 
-    seeds = range(20)
+    seeds = range(5)
     iterations = 50
-    N_list = [64, 256, 1024]
+    N = 64
 
-    results = {name: {'null_depth': [], 'gain': [], 'ptnr': [], 'hard_residual': [], 'flips': [], 'times': {n: [] for n in N_list}} for name in policies}
+    results = []
 
-    print("Running benchmarks...")
-    for name, pclass in policies.items():
-        print(f"  Benchmarking {name}...")
+    import itertools
+    keys, values = zip(*sweep_grid.items())
+    combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-        # Run 20 seeds for main plots (N=64)
+    print("Running combinatorial grid search over configurations...")
+    for idx, config in enumerate(combinations):
+        print(f"[{idx+1}/{len(combinations)}] Testing {config}...")
         for seed in seeds:
-            hist, flips, _ = run_experiment(pclass, N=64, iterations=iterations, seed=seed)
-            results[name]['null_depth'].append([h['null_depth'] for h in hist])
-            results[name]['gain'].append([h['gain'] for h in hist])
-            results[name]['ptnr'].append([h['ptnr'] for h in hist])
-            results[name]['hard_residual'].append([h['hard_residual'] for h in hist])
-            results[name]['flips'].append(flips)
+            history = run_experiment(config, N=N, iterations=iterations, seed=seed)
+            final_metrics = history[-1]
 
-        # Run scaling benchmarks
-        for N in N_list:
-            n_seeds = 5 if N == 1024 else 20
-            for seed in range(n_seeds):
-                _, _, t_ms = run_experiment(pclass, N=N, iterations=1, seed=seed) # Just 1 iteration for timing to save time
-                results[name]['times'][N].append(t_ms)
+            results.append({
+                'projection_type': config['projection_type'],
+                'lr_call_frequency': config['lr_call_frequency'],
+                'preserve_gain_weight': config['preserve_gain_weight'],
+                'Seed': seed,
+                'Final_Gain': final_metrics['gain'],
+                'Final_Null_Depth': final_metrics['null_depth'],
+                'Final_PTNR': final_metrics['ptnr']
+            })
 
-    # Plotting
-    fig, axes = plt.subplots(3, 2, figsize=(15, 15))
-    axes = axes.flatten()
+    # Save outputs
+    df_autopsy = pd.DataFrame(AUTOPSY_RECORDS)
+    df_autopsy.to_csv('autopsy_report.csv', index=False)
+    print("Saved autopsy_report.csv")
 
-    colors = ['black', 'red', 'blue', 'orange', 'purple', 'green', 'magenta']
+    df_results = pd.DataFrame(results)
+    df_results.to_csv('sweep_summary.csv', index=False)
+    print("Saved sweep_summary.csv")
 
-    for (name, data), color in zip(results.items(), colors):
-        t_axis = np.arange(1, iterations + 1)
+    # Generate heatmaps
+    # Average across preserve_gain_weight for heatmap
+    pivot_gain = df_results.pivot_table(values='Final_Gain', index='lr_call_frequency', columns='projection_type', aggfunc='mean')
+    pivot_null = df_results.pivot_table(values='Final_Null_Depth', index='lr_call_frequency', columns='projection_type', aggfunc='mean')
 
-        def plot_iqr(ax_idx, key, label=None):
-            mean = np.mean(data[key], axis=0)
-            p25 = np.percentile(data[key], 25, axis=0)
-            p75 = np.percentile(data[key], 75, axis=0)
-            axes[ax_idx].plot(t_axis, mean, label=label if label else name, color=color)
-            axes[ax_idx].fill_between(t_axis, p25, p75, color=color, alpha=0.2)
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-        plot_iqr(0, 'null_depth')
-        plot_iqr(1, 'gain')
-        plot_iqr(2, 'ptnr')
-        plot_iqr(3, 'hard_residual')
-        plot_iqr(4, 'flips', label=name)
+    sns.heatmap(pivot_gain, annot=True, fmt=".1f", cmap="viridis", ax=axes[0])
+    axes[0].set_title("Mean Final Main-Beam Gain (dB)")
 
-        # Scaling Plot
-        mean_times = [np.mean(data['times'][n]) for n in N_list]
-        axes[5].plot(N_list, mean_times, '-o', color=color, label=name)
-
-    axes[0].set_title('Null Depth (dB)')
-    axes[0].axhline(-40, color='r', linestyle='--')
-    axes[1].set_title('Main-Beam Gain (dB)')
-    axes[2].set_title('Peak-to-Null Ratio (PTNR in dB)')
-    axes[3].set_title('Hard Manifold Projection Residual')
-    axes[4].set_title('Cumulative Branch Flips')
-    axes[4].legend(loc='upper left')
-    axes[5].set_title('Scaling Performance')
-    axes[5].set_xlabel('Array Scale N')
-    axes[5].set_ylabel('Wall-clock time (ms)')
-    axes[5].set_xscale('log')
-    axes[5].set_yscale('log')
-    axes[5].set_xticks(N_list)
-    axes[5].set_xticklabels(N_list)
+    sns.heatmap(pivot_null, annot=True, fmt=".1f", cmap="magma", ax=axes[1])
+    axes[1].set_title("Mean Final Null Depth (dB)")
 
     plt.tight_layout()
-    plt.savefig('Final_6Panel_Benchmark.png')
-    print("Saved Final_6Panel_Benchmark.png")
+    plt.savefig('sweep_heatmaps.png')
+    print("Saved sweep_heatmaps.png")
 
 if __name__ == '__main__':
     run_benchmarks()

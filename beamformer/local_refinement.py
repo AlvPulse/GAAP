@@ -3,7 +3,7 @@ import numpy as np
 from .geometry import compute_local_mobility
 from .synthesis import get_steering_vector
 
-def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinement_steps=10, step_size=0.05, adaptive_decay=0.9):
+def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinement_steps=10, step_size=0.05, adaptive_decay=0.9, lr_objective='ptnr_constrained', autopsy_callback=None):
     """
     Stage 2: Geometry-Aware Local Refinement.
     Selects the most "mobile" elements (high M_n) and performs small manifold-tangent
@@ -17,6 +17,7 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
         k_active: Number of elements to include in the active set.
         step_size: Initial step size for voltage perturbation.
         adaptive_decay: Decay factor for step size upon success.
+        lr_objective: The objective function ('null_only' or 'ptnr_constrained').
 
     Returns:
         V_refined: Array of N refined voltages.
@@ -83,14 +84,18 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
                     else:
                         peak_power = 1.0 # fallback
 
-                    # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
-                    # Use a small epsilon to avoid division by zero
-                    ptnr = peak_power / (null_power + 1e-10)
-                    cost = -ptnr # Negative because we minimize cost
+                    if lr_objective == 'null_only':
+                        cost = null_power
+                    else: # 'ptnr_constrained'
+                        # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
+                        # Use a small epsilon to avoid division by zero
+                        ptnr = peak_power / (null_power + 1e-10)
+                        cost = -ptnr # Negative because we minimize cost
 
-                    # 4. Gain Penalty (Penalize heavily if peak drops by > 3dB from baseline)
-                    if peak_power < 0.5 * baseline_peak_power:
-                        cost += 1e6 # severe penalty
+                        # 4. Gain Penalty (Penalize heavily if peak drops by > 0.5dB from baseline)
+                        # 0.5 dB drop corresponds to ~0.89 in linear power ratio
+                        if peak_power < 0.89 * baseline_peak_power:
+                            cost += 1e6 # severe penalty
 
                     # Revert cache state
                     af_cache.update(idx, c_n[idx])
@@ -159,5 +164,11 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
             else:
                 # If neither step improved, reduce the step size for next time
                 current_step_sizes[idx] *= 0.5
+
+        if autopsy_callback and (step + 1) % 5 == 0:
+            c_post_lr = np.zeros(len(V_refined), dtype=np.complex128)
+            for n in range(len(V_refined)):
+                c_post_lr[n] = element.get_complex_weight(V_refined[n])
+            autopsy_callback(f'Post-LR Step {step+1}', c_post_lr)
 
     return V_refined

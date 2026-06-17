@@ -134,6 +134,13 @@ def optimize_beam_ap(
         if current_sa_cost == float('inf'):
             current_sa_cost = current_residual
 
+        # Fire autopsy callback Post-AP
+        if kwargs.get('autopsy_callback'):
+            c_post_ap = np.zeros(N, dtype=np.complex128)
+            for n in range(N):
+                c_post_ap[n] = element.get_complex_weight(V_n[n])
+            kwargs['autopsy_callback']('Post-AP Step', c_post_ap)
+
         # INNER LOOP: Local Refinement inside AP
         # We perform local refinement iteratively during the AP run, ensuring we refine
         # the weights obtained in the current geometry basin BEFORE calculating the cost.
@@ -158,7 +165,9 @@ def optimize_beam_ap(
                 af_cache=af_cache,
                 k_active=kwargs.get('k_active', 8),
                 refinement_steps=kwargs.get('refinement_steps_inner', 3),
-                step_size=current_step_size
+                step_size=current_step_size,
+                lr_objective=kwargs.get('lr_objective', 'ptnr_constrained'),
+                autopsy_callback=kwargs.get('autopsy_callback')
             )
 
         # Final c_n evaluated at new voltages
