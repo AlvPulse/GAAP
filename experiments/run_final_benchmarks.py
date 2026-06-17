@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 
 from beamformer.element_model import SyntheticVaractor
-from beamformer.synthesis import synthesize_schelkunoff
+from beamformer.synthesis import get_steering_vector
 from beamformer.pattern_projection import Task
 from beamformer.controllers.modular_backbone import OptimizationBackbone
 from beamformer.controllers.policies import (
@@ -25,9 +25,8 @@ def run_experiment(policy_class, N=64, iterations=50, seed=42):
     element = SyntheticVaractor()
     task = Task(type='nulled', target_angles=[target_u], null_angles=null_u)
 
-    # Init
-    w = synthesize_schelkunoff(N, target_u, null_u)
-    w /= np.max(np.abs(w))
+    # Init (Pencil Beam for maximum gain preservation)
+    w = get_steering_vector(N, target_u)
 
     backbone = OptimizationBackbone(task, element, N)
     policy = policy_class(N)
@@ -41,7 +40,7 @@ def run_experiment(policy_class, N=64, iterations=50, seed=42):
     _, b_init, _ = element.project(w[0]) # just to initialize b shape
     b = np.zeros(N, dtype=int)
     for n in range(N):
-        _, _, b[n] = element.project(w[n], method='phase_only')
+        _, _, b[n] = element.project(w[n], method='euclidean')
 
     start_time = time.time()
 
