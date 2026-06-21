@@ -83,10 +83,11 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
                     else:
                         peak_power = 1.0 # fallback
 
-                    # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
+                                        # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
                     # Use a small epsilon to avoid division by zero
                     ptnr = peak_power / (null_power + 1e-10)
-                    cost = -ptnr # Negative because we minimize cost
+                    cost = null_power # Minimize null power directly
+
 
                     # 4. Gain Penalty (Penalize heavily if peak drops by > 3dB from baseline)
                     if peak_power < 0.5 * baseline_peak_power:
