@@ -1,5 +1,12 @@
-__pycache__/
-*.pyc
+
+# Ignore experiment scripts created during debugging
+experiments/test_*.py
+experiments/fix_*.py
+experiments/sanity_*.py
+experiments/naked_*.py
+experiments/hardware_ablation.py
+experiments/lr_ablation.py
+fix_*.py
 *.png
 .ipynb_checkpoints/
 debug_results/
@@ -35,3 +42,9 @@ experiments/SOTA_Performance_Scaling.png
 experiments/SOTA_Success_Profiles.png
 experiments/SOTA_Pareto_Frontier.png
 experiments/data/sota_benchmark_final.csv
+*.csv
+*.npy
+*.log
+outcmaes/
+experiments/comprehensive_comparisons/data/
+__pycache__/
