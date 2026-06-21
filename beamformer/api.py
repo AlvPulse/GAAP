@@ -78,6 +78,15 @@ def beamform(
         V_n, c_n = solve_omp_inspired(task, element, N, initial_weights)
         return {'voltages': V_n, 'weights': c_n, 'initial_weights': initial_weights, 'history': {'residuals': []}}
 
+    elif solver == 'mrlcmv':
+        from .coherent_lcmv import beamform_mrlcmv
+        return beamform_mrlcmv(
+            task, element, N,
+            refine=kwargs.get('refine', 'glcp'),
+            suppress_sll=kwargs.get('suppress_sll', False),
+            **{k: v for k, v in kwargs.items() if k not in ('refine', 'suppress_sll', 'solver')}
+        )
+
     # Calculate optimal non-projection baseline for reference
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(
         initial_weights, element,

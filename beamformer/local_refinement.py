@@ -77,23 +77,27 @@ def refine_local_active_set(V_cand, task, element, af_cache, k_active=8, refinem
 
                     # 2. Peak Power
                     peak_power = 0.0
+                    cost= 0
                     if task.target_angles:
                         for t in task.target_angles:
                             t_idx = np.argmin(np.abs(angles - t))
                             peak_power += np.abs(af_vals[t_idx])**2
+
+                        if peak_power < 0.7 * baseline_peak_power:
+                            cost += 10*(baseline_peak_power- peak_power) # severe penalty
                     else:
                         peak_power = 1.0 # fallback
+                    ptnr = peak_power / (null_power + 1e-10)
+                    cost += null_power # Minimize null power directly
 
                                         # 3. Peak-to-Null Ratio (we want to maximize this, so cost is inverse)
                         # Use a small epsilon to avoid division by zero
-                        ptnr = peak_power / (null_power + 1e-10)
-                        cost = null_power # Minimize null power directly
+                    
 
 
                         # 4. Gain Penalty (Penalize heavily if peak drops by > 0.5dB from baseline)
                         # 0.5 dB drop corresponds to ~0.89 in linear power ratio
-                        if peak_power < 0.7 * baseline_peak_power:
-                            cost += 10*(baseline_peak_power- peak_power) # severe penalty
+                       
 
                     # Revert cache state
                     af_cache.update(idx, c_n[idx])
