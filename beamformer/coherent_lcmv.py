@@ -62,6 +62,53 @@ import numpy as np
 
 
 # --------------------------------------------------------------------------- #
+# Optional cost-accounting (for fair, machine-independent benchmarking)
+# --------------------------------------------------------------------------- #
+# These counters let a benchmark report MR-LCMV's cost in the SAME currency as
+# the iterative/derivative-free baselines: the number of *full forward-model
+# evaluations* (one complete array-factor evaluation of a candidate weight
+# vector at the constraint directions). This is the standard machine-independent
+# optimization metric and replaces wall-clock time for publication.
+#
+#   _EVAL_COUNT : full array-factor evaluations (dual-correction leakage checks,
+#                 gauge scoring, PTNR gauge scoring). Comparable to one call of
+#                 the baselines' penalized objective J(V).
+#   _GLCP_UPDATES : committed Gain-Locked Coordinate Polish coordinate moves.
+#                 GLCP examines the manifold grid via O(M) rank-1 incremental
+#                 updates and performs NO full array-factor evaluation, so these
+#                 are reported SEPARATELY (not folded into _EVAL_COUNT) to avoid
+#                 either inflating or understating the true forward-model cost.
+#
+# The counters are pure bookkeeping: when nobody resets/reads them they simply
+# increment a module global and change no returned value, so existing callers
+# and tests are unaffected.
+_EVAL_COUNT = 0
+_GLCP_UPDATES = 0
+
+
+def reset_counters():
+    """Zero the forward-model evaluation counters before a measured run."""
+    global _EVAL_COUNT, _GLCP_UPDATES
+    _EVAL_COUNT = 0
+    _GLCP_UPDATES = 0
+
+
+def get_counters():
+    """Return (full_forward_evals, glcp_committed_updates) since the last reset."""
+    return _EVAL_COUNT, _GLCP_UPDATES
+
+
+def _bump_eval(k=1):
+    global _EVAL_COUNT
+    _EVAL_COUNT += k
+
+
+def _bump_glcp(k=1):
+    global _GLCP_UPDATES
+    _GLCP_UPDATES += k
+
+
+# --------------------------------------------------------------------------- #
 # Manifold access helpers
 # --------------------------------------------------------------------------- #
 def _get_manifold(element):
@@ -164,6 +211,7 @@ def solve_coherent_lcmv(
             target = tgt0 - np.conj(A) @ mu
             c, V, _ = _retract(target, c_grid, V_grid)
             leak = A.T @ c                          # (M,) null leakage
+            _bump_eval()                             # one full forward-model eval
             score = max(abs(leak)) if len(leak) else 0.0
             if best is None or score < best[2]:
                 best = (c.copy(), V.copy(), score)
@@ -171,6 +219,7 @@ def solve_coherent_lcmv(
         return best
 
     def score_solution(c):
+        _bump_eval()                                 # one full forward-model eval
         g_db = 20 * np.log10(abs(_af(c, u_t, N)) / N + 1e-12)
         pen = 0.0
         for um in nulls:
@@ -306,6 +355,7 @@ def gain_locked_polish(
                 V[i] = V_grid[j]
                 St = St_cand[j]
                 Sm = Sm_cand[j]
+                _bump_glcp()                          # one committed coordinate move
     return V, c
 
 
@@ -395,6 +445,7 @@ def beamform_mrlcmv(
         return V_n, c_n, info, init
 
     def ptnr_score(c):
+        _bump_eval()                                 # one full forward-model eval
         g = 20 * np.log10(abs(_af(c, u_t, N)) + 1e-12)
         nd = np.mean([20 * np.log10(abs(_af(c, um, N)) + 1e-12) for um in nulls])
         return (g - nd) + 0.01 * g  # PTNR, tie-broken toward higher gain

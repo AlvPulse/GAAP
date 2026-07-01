@@ -359,6 +359,49 @@ def solve_perturbation(prob, rng, rounds=12, n_probe=3):
 
 
 # --------------------------------------------------------------------------- #
+# Tier VII -- Semidefinite Relaxation (SDR) with Gaussian randomization
+# --------------------------------------------------------------------------- #
+def solve_sdr(prob, rng, n_rand=64):
+    """Semidefinite-relaxation beamformer for unimodular nulling, then manifold
+    projection -- a standard strong baseline for phase-only / constant-modulus
+    array problems.
+
+    The QCQP  max |w^H a_t|^2  s.t.  w^H R_n w <= 1, |w_n| = 1  relaxes to an SDP
+    in W = w w^H; its solution is rank-1 in the noise-free single-target case and
+    is then exactly the MVDR/Capon direction  w_cont ∝ R_n^{-1} a_t  (R_n = the
+    null-direction covariance). We form that rank-1 SDR solution and recover a
+    unimodular vector by Gaussian randomization (sampling phases consistent with
+    W = w_cont w_cont^H), keeping the best draw under the shared objective, then
+    project onto the hardware manifold. No external SDP solver required.
+    """
+    s_t = np.conj(prob.a_t)                            # matched filter (max-gain weight)
+    if prob.A.shape[1] > 0:                            # project off the null subspace (= rank-1 SDR opt.)
+        A = prob.A
+        G = A.T @ np.conj(A)
+        G += 1e-6 * np.trace(G).real / max(A.shape[1], 1) * np.eye(A.shape[1])
+        P = np.eye(prob.N) - np.conj(A) @ np.linalg.solve(G, A.T)
+        w_cont = P @ s_t                               # MVDR/LCMV continuous optimum
+    else:
+        w_cont = s_t.copy()
+    cg, Vg = prob.element.c_grid, prob.element.V_grid
+    base = np.angle(w_cont)
+
+    def project(phases):                               # unimodular -> hardware manifold
+        c_ideal = np.exp(1j * phases)
+        idx = np.argmax(np.real(np.conj(c_ideal)[:, None] * cg[None, :]), axis=1)
+        return Vg[idx].astype(float)
+
+    best_V = project(base)
+    best_J = prob.cost(best_V)
+    for _ in range(n_rand):                            # Gaussian randomization of the rank-1 SDR sol.
+        V = project(base + rng.normal(0.0, 0.3, prob.N))
+        J = prob.cost(V)
+        if J < best_J:
+            best_V, best_J = V, J
+    return best_V
+
+
+# --------------------------------------------------------------------------- #
 # Prior proposed -- OBH-ZKD (orbital basin hopping + zero-knowledge descent)
 # --------------------------------------------------------------------------- #
 def solve_obh_zkd(prob, rng, K=8, max_hops=10, T=0.1):
@@ -402,8 +445,17 @@ def solve_obh_zkd(prob, rng, K=8, max_hops=10, T=0.1):
 # --------------------------------------------------------------------------- #
 def solve_ours(prob, rng, refine="glcp", gauge="ptnr"):
     from .api import beamform
+    from . import coherent_lcmv as CL
+    CL.reset_counters()
     res = beamform(prob.task, prob.element, N=prob.N, solver="mrlcmv",
                    refine=refine, gauge=gauge)
+    # Report the same cost currency as the iterative/DFO baselines: number of
+    # full forward-model (array-factor) evaluations. GLCP's committed coordinate
+    # moves use O(M) incremental updates (no full evaluation), so they are tracked
+    # separately on the Problem and surfaced as a distinct column.
+    full_evals, glcp_updates = CL.get_counters()
+    prob.eval_count = full_evals
+    prob.glcp_updates = glcp_updates
     return res["voltages"]
 
 
@@ -425,6 +477,7 @@ SOLVERS = {
     "CMA-ES":            (solve_cmaes,        "Global",         True),
     "Cross-Entropy":     (solve_cem,          "Global",         True),
     "Simulated Bifurc.": (solve_sb,           "Quantum-insp.",  True),
+    "SDR (randomized)":  (solve_sdr,          "Relaxation",     True),
     "Perturbation Null": (solve_perturbation, "Hardware-aware", True),
     "OBH-ZKD (prior)":   (solve_obh_zkd,      "Prior proposed", True),
     "MR-LCMV (ours)":    (solve_ours_none,    "Ours",           False),
@@ -442,5 +495,6 @@ def run_solver(name, task, element, N, seed=0, discrete=True, **kw):
     ms = (time.perf_counter() - t) * 1e3
     c = prob.weights(V)
     m = prob.metrics(c)
-    m.update(family=family, evals=prob.eval_count, ms=ms)
+    m.update(family=family, evals=prob.eval_count, ms=ms,
+             glcp_updates=getattr(prob, "glcp_updates", 0))
     return m

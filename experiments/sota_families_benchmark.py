@@ -90,6 +90,7 @@ def budgets(quick=False):
         "CMA-ES":             dict(max_iter=150),
         "Cross-Entropy":      dict(iters=50),
         "Simulated Bifurc.":  dict(steps=300),
+        "SDR (randomized)":   dict(n_rand=64),
         "Perturbation Null":  dict(rounds=8),
         "OBH-ZKD (prior)":    dict(),
         "MR-LCMV (ours)":     dict(),
