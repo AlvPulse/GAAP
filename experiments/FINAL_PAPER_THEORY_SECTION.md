@@ -8,13 +8,14 @@ This alignment mathematically defines the *Local Feasible Expansion* available t
 
 A common assumption in phased array synthesis is that a global phase rotation $\psi$ applied uniformly across the aperture can be factored out of the final array factor. For an ideal, continuous system, this is trivial. However, for a physically constrained array, the ideal weights must be projected onto a highly coupled, discrete hardware manifold $\mathcal{M}$ (the voltage-dependent amplitude/phase curve of the varactor).
 
-Let $\Pi_{\mathcal{M}}$ be the non-linear projection operator that snaps a continuous weight vector $w \in \mathbb{C}^N$ to its nearest Euclidean neighbor on the discrete manifold $\mathcal{M}$. Let $P_\psi(w)$ be the projection of the $\psi$-rotated weight vector:
+Let $\Pi_{\mathcal{M}}$ be the non-linear element-wise projection operator that snaps each component of a continuous weight vector $w \in \mathbb{C}^N$ to its nearest Euclidean neighbor $|w_n - c_n|$ on the discrete manifold $\mathcal{M}$. Let $P_\psi(w)$ be the projection of the $\psi$-rotated weight vector:
 $$P_\psi(w) = \Pi_{\mathcal{M}}(w e^{j\psi})$$
 
-**Theorem 1 (Non-Commutative Hardware Projection):** For a non-uniformly spaced discrete hardware manifold $\mathcal{M}$ (such as a VDIL varactor), the projection operator $\Pi_{\mathcal{M}}$ does not commute with a global phase rotation. That is, for general $w$ and $\psi_1 \neq \psi_2$:
+**Theorem 1 (Non-Commutative Hardware Projection):** For a discrete hardware manifold $\mathcal{M}$ that is non-uniformly spaced in either phase or amplitude (such as a VDIL varactor), the element-wise projection operator $\Pi_{\mathcal{M}}$ does not commute with a global phase rotation. That is, there exists $w \in \mathbb{C}^N$ such that for $\psi_1 \neq \psi_2$:
 $$P_{\psi_1}(w) \neq e^{j(\psi_1 - \psi_2)} P_{\psi_2}(w)$$
+*(Note: If $\mathcal{M}$ is an ideal continuous unit circle, or an ideal uniform phase shifter where $\Delta\psi$ is a multiple of the grid spacing, commutativity strictly holds).*
 
-Because the hardware grid points $c_n(V)$ are non-uniformly spaced and coupled in the complex plane, rotating the target continuous vector by $\Delta\psi$ causes individual elements to cross quantization boundaries asymmetrically. Altering $\psi$ fundamentally changes the specific combination of physical grid states selected by the array. Therefore, $\psi$ acts as a **structural alignment operator**, shifting the continuous subspace relative to the fixed discrete hardware grid.
+Because the hardware grid points $c_n(V)$ are non-uniformly spaced and coupled in the complex plane, rotating the target continuous vector by $\Delta\psi$ causes individual elements to cross Voronoi quantization boundaries asymmetrically.
 
 ## B. First-Order Sensitivity of Gain vs. Nulls
 
@@ -24,11 +25,11 @@ Consider an element $n$ whose desired continuous weight is $w_n = a_n e^{j\phi_n
 
 The main-beam Array Factor at target angle $\theta_0$ is the coherent sum of these perturbed elements:
 $$AF(\theta_0) = \sum_{n=1}^N \tilde{a}_n(\psi) e^{j\epsilon_n}$$
-where $\epsilon_n$ is the phase quantization error. Because the elements are uniformly distributed in phase across the aperture, the *average* amplitude loss incurred by the VDIL coupling remains nearly constant. To first order, small perturbations in individual element amplitudes average out, making $AF(\theta_0)$ (and thus total Gain) highly insensitive to $\psi$. Our empirical measurements (see `experiments/ptnr_landscape.png`) confirm that $Gain(\psi)$ typically varies by less than $0.6$ dB across the entire $0$ to $2\pi$ sweep.
+where $\epsilon_n$ is the phase quantization error. Because the target phases $\phi_n$ are pseudo-randomly distributed across $[0, 2\pi)$ for a scanned array, shifting them by $\psi$ merely shifts the sampling grid over the periodic amplitude-loss function. For large $N$, the Riemann sum approaches the integral of the amplitude function, which is constant. Thus, $AF(\theta_0)$ is highly insensitive to $\psi$. Our measurements confirm that the peak-to-peak swing of $Gain(\psi)$ is typically less than $0.6$ dB.
 
 Conversely, a null at $\theta_m$ relies on precise destructive interference:
 $$AF(\theta_m) = \sum_{n=1}^N \tilde{a}_n(\psi) e^{j\Delta_n(\theta_m)} \approx 0$$
-Near a deep null, the sum approaches zero, meaning the behavior is entirely dominated by first-order perturbations. If even a single element crosses a quantization boundary due to a shift in $\psi$, snapping to a hardware state with slightly different amplitude or phase, the fragile phasor cancellation is destroyed. Thus, the null landscape is highly sensitive, oscillating by $50+$ dB as $\psi$ varies.
+Near a deep null, the sum approaches zero, making it fragile to first-order perturbations. Suppose a shift in $\psi$ causes element $k$ to cross a Voronoi boundary, changing its state by a discrete grid step $\Delta c_k \approx 0.1$. The perturbation to the null is $\Delta AF = \Delta c_k e^{j\pi k u_m}$. If the original null was deep (e.g., -40 dB or $\epsilon \approx 0.01$), this single element jumping boundaries degrades the sum to $|0.01 + 0.1| \approx 0.11$ (-19 dB). The discrete perturbation overwhelms the residual, causing the null landscape to oscillate wildly (often $>50$ dB peak-to-peak).
 
 This proves that $Gain(\psi)$ is fundamentally flat and provides no topological signal. Selecting $\psi$ by Gain is mathematically equivalent to selecting a random structural alignment.
 
@@ -59,7 +60,7 @@ Furthermore, tracking the optimization trajectories (`experiments/trajectory_div
 
 **3. Optimizer Independence:** To prove this is a fundamental hardware geometry phenomenon and not a quirk of our specific Gain-Locked Coordinate Polish (GLCP) algorithm, we swapped the optimizer for a simple, unconstrained greedy hill-climbing descent. Across 30 randomized trials (N=64), the median Opportunity Loss was **10.77 dB for GLCP** and **11.33 dB for Greedy Descent**. The structural alignment dictated by $\psi$ bounds the performance of *any* local optimizer.
 
-**4. Hardware Severity Scaling:** If this theory holds, as the hardware constraints approach an ideal phase shifter (no amplitude coupling), the non-commutativity vanishes, and $L \rightarrow 0$. As shown in `experiments/hardware_impairment_scaling.csv` and `experiments/hardware_impairment_scaling.png`, testing an array with $0$ dB amplitude ripple yielded an Opportunity Loss near $0$ dB. As the VDIL amplitude ripple increased to $15$ dB, the Opportunity Loss rapidly scaled and saturated between $11$-$17$ dB. The PTNR Gauge is strictly required *because* of the hardware's non-linear constraints.
+**4. Hardware Severity Scaling:** If this theory holds, as the hardware constraints approach an ideal phase shifter (uniform phase spacing, no amplitude coupling), the non-commutativity vanishes, and $L \rightarrow 0$. We tested a parameterized hardware model interpolating from an ideal uniform phase shifter ($\alpha=0.0$) to a severe non-uniform VDIL varactor ($\alpha=1.0$) in `experiments/true_hardware_scaling.csv`. At $\alpha=0.0$, the median Opportunity Loss plummets to ~5 dB (the residual loss is purely due to 5-bit uniform phase quantization). As non-uniformity and amplitude coupling increase ($\alpha \rightarrow 1.0$), the Opportunity Loss rapidly scales and saturates at ~18 dB. The massive 18 dB penalty is strictly a function of the hardware's geometric non-uniformity.
 
 **5. Sequential Ablation and Scaling:**
 A sequential ablation of the controller stages over 50 randomized tasks (N=64) cleanly demonstrates this synergy (`experiments/staircase_ablation_medians.csv`):
