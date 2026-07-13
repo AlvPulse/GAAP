@@ -108,4 +108,4 @@ def run_massive_resolution_scaling_test(N=64, num_tasks=500):
 
 
 if __name__ == "__main__":
-    run_massive_resolution_scaling_test(num_tasks=50) # Reduced to 50 for realistic timeout, script is structured to go to 500
+    run_massive_resolution_scaling_test(num_tasks=500)
