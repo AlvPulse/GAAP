@@ -516,7 +516,7 @@ def main():
         realism_contrast(args.N, tasks, quick=args.quick)
 
     if args.scale:
-        run_scaling([16, 32, 64, 128, 256], plot=args.plot)
+        run_scaling([16, 32, 64, 128, 256, 512, 1024], plot=args.plot)
 
     print("\nTakeaway: report the DISTRIBUTION, not one task. Win-rate + success "
           "probabilities show where each family actually wins.")
