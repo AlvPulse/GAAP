@@ -79,19 +79,19 @@ def make_tasks(n, u_max=0.6, max_nulls=3):
 # --------------------------------------------------------------------------- #
 def budgets(quick=False):
     b = {
-        "PGD":                dict(max_iter=200),
-        "Coordinate Descent": dict(sweeps=6),
-        "Trust-Region/LM":    dict(max_nfev=200),
-        "Riemannian CG":      dict(max_iter=250),
-        "Scaled ADMM":        dict(max_iter=250),
-        "Simulated Annealing":dict(max_iter=60),
-        "Basin Hopping":      dict(niter=15),
-        "Differential Eq.":   dict(maxiter=40),
-        "CMA-ES":             dict(max_iter=150),
-        "Cross-Entropy":      dict(iters=50),
-        "Simulated Bifurc.":  dict(steps=300),
-        "SDR (randomized)":   dict(n_rand=64),
-        "Perturbation Null":  dict(rounds=8),
+        "PGD":                dict(max_iter=2000),
+        "Coordinate Descent": dict(sweeps=25),
+        "Trust-Region/LM":    dict(max_nfev=2000),
+        "Riemannian CG":      dict(max_iter=2500),
+        "Scaled ADMM":        dict(max_iter=2500),
+        "Simulated Annealing":dict(max_iter=300),
+        "Basin Hopping":      dict(niter=50),
+        "Differential Eq.":   dict(maxiter=150),
+        "CMA-ES":             dict(max_iter=500),
+        "Cross-Entropy":      dict(iters=150),
+        "Simulated Bifurc.":  dict(steps=1000),
+        "SDR (randomized)":   dict(n_rand=256),
+        "Perturbation Null":  dict(rounds=25, n_probe=5),
         "OBH-ZKD (prior)":    dict(),
         "MR-LCMV (ours)":     dict(),
         "MR-LCMV+GLCP (ours)":dict(),
@@ -132,7 +132,7 @@ def run_sweep(N, tasks, seeds, quick=False, solver_subset=None, discrete=True):
                 done += 1
                 rows.append(dict(solver=name, family=m["family"], task=ti, seed=seed,
                                  n_nulls=len(task.null_angles), ok=ok, **{k: m[k] for k in
-                                 ("gain", "worst_null", "avg_null", "ptnr", "gain_loss", "evals", "ms")}))
+                                 ("gain", "worst_null", "avg_null", "ptnr", "gain_loss", "evals")}))
         sys.stderr.write(f"  task {ti + 1}/{len(tasks)} done ({done}/{n_total} runs)\n")
     return rows
 
@@ -200,7 +200,6 @@ def aggregate(rows, names):
             solver=n, family=rs[0]["family"], runs=len(rs),
             gain_m=gm, gain_s=gs, wn_m=wm, wn_s=ws, ptnr_m=pm, ptnr_s=ps,
             loss_m=lm, loss_s=ls, evals=(float(np.mean(ev)) if ev.size else 0.0),
-            ms=_ms([r["ms"] for r in rs])[0],
             **{f"s{int(-th)}": succ[th] for th in THRESHOLDS},
             winrate=(wins[n] / n_inst if n_inst else 0.0)))
     summary.sort(key=lambda d: (-d["ptnr_m"]))
@@ -213,7 +212,7 @@ def print_summary(summary, N, n_inst, ceiling_db):
           f"gain ceiling={ceiling_db:.2f} dB (0 dB = ideal coherent)")
     print(f"{'='*120}")
     h = (f"{'solver':22s} {'family':15s} {'gain dB':>12s} {'worst null':>13s} "
-         f"{'PTNR dB':>13s} {'loss':>7s} {'s30':>5s} {'s40':>5s} {'s50':>5s} {'win%':>6s} {'ms':>7s}")
+         f"{'PTNR dB':>13s} {'loss':>7s} {'s30':>5s} {'s40':>5s} {'s50':>5s} {'win%':>6s} {'evals':>7s}")
     print(h); print("-" * len(h))
     for d in summary:
         print(f"{d['solver']:22s} {d['family']:15s} "
@@ -222,7 +221,7 @@ def print_summary(summary, N, n_inst, ceiling_db):
               f"{d['ptnr_m']:7.1f}±{d['ptnr_s']:4.1f} "
               f"{d['loss_m']:6.2f} "
               f"{d['s30']*100:4.0f} {d['s40']*100:4.0f} {d['s50']*100:4.0f} "
-              f"{d['winrate']*100:5.0f} {d['ms']:7.0f}")
+              f"{d['winrate']*100:5.0f} {d['evals']:7.0f}")
     print("\ngain = normalized main-beam gain (mean±std), loss = ceiling-gain (lower=better)")
     print("sXX = P(worst null <= -XX dB);  win% = share of instances within "
           f"{WIN_TOL} dB of best PTNR")
@@ -294,7 +293,7 @@ def head_to_head(rows, a, b):
 # Dolan-More performance profile (time-to-success)
 # --------------------------------------------------------------------------- #
 def performance_profile(rows, names, thresh_db=PROFILE_DB):
-    """A solver 'solves' an instance if worst_null <= thresh_db; cost = wall ms.
+    """A solver 'solves' an instance if worst_null <= thresh_db; cost = evals.
     rho_s(tau) = fraction of instances solved by s within tau x the best solver's cost."""
     instances = {}
     for r in _fill_seeds(rows, names):
@@ -303,7 +302,7 @@ def performance_profile(rows, names, thresh_db=PROFILE_DB):
     # best cost per instance among solvers that solved it
     best_cost = {}
     for key, inst in instances.items():
-        solved = [x["ms"] for x in inst if x["worst_null"] <= thresh_db]
+        solved = [x["evals"] for x in inst if x["worst_null"] <= thresh_db]
         best_cost[key] = min(solved) if solved else None
     taus = [1, 2, 4, 8, 16, 32, 64, 1e9]
     prof = {}
@@ -312,7 +311,7 @@ def performance_profile(rows, names, thresh_db=PROFILE_DB):
         for key, inst in instances.items():
             r = next((x for x in inst if x["solver"] == n), None)
             if r and r["worst_null"] <= thresh_db and best_cost[key]:
-                ratios.append(r["ms"] / best_cost[key])
+                ratios.append(r["evals"] / best_cost[key])
         prof[n] = [(float(sum(1 for rt in ratios if rt <= t)) / P) if (P and ratios) else 0.0
                    for t in taus]
     return taus, prof, P
@@ -320,7 +319,7 @@ def performance_profile(rows, names, thresh_db=PROFILE_DB):
 
 def print_profile(taus, prof, names, P):
     print(f"\n[PERFORMANCE PROFILE]  solved = worst null <= {PROFILE_DB:.0f} dB, "
-          f"cost = wall-clock ms   (P={P} instances)")
+          f"cost = total oracle evals   (P={P} instances)")
     print(f"  rho_s(tau) = P(solver solves instance within tau x fastest solver's time)")
     hdr = f"  {'solver':22s} " + " ".join(f"t<={int(t) if t<1e8 else 'inf':>5}" for t in taus)
     print(hdr)
@@ -346,7 +345,7 @@ def run_scaling(Ns, plot=False):
           "cost grows ~ exponentially -- not competitive past N~32.")
     print(f"{'='*100}")
     task = Task("nulled", target_angles=[0.2], null_angles=[-0.4, 0.5])
-    data = {n: dict(N=[], gain=[], wn=[], ptnr=[], ms=[]) for n in SCALE_SUBSET}
+    data = {n: dict(N=[], gain=[], wn=[], ptnr=[], evals=[]) for n in SCALE_SUBSET}
     for N in Ns:
         # keep per-N cost bounded for the heavier local solvers
         bud = {"Coordinate Descent": dict(sweeps=4, grid=48),
@@ -354,16 +353,16 @@ def run_scaling(Ns, plot=False):
                "Perturbation Null": dict(rounds=6), "OBH-ZKD (prior)": dict(),
                "MR-LCMV (ours)": dict(), "MR-LCMV+GLCP (ours)": dict()}
         print(f"\n  N={N}")
-        print(f"  {'solver':22s} {'gain':>7s} {'worst null':>11s} {'PTNR':>8s} {'ms':>8s}")
+        print(f"  {'solver':22s} {'gain':>7s} {'worst null':>11s} {'PTNR':>8s} {'evals':>8s}")
         for n in SCALE_SUBSET:
             t0 = time.perf_counter()
             try:
                 m = B.run_solver(n, task, ELEMENT, N, seed=0, discrete=True, **bud[n])
                 print(f"  {n:22s} {m['gain']:7.2f} {m['worst_null']:11.1f} "
-                      f"{m['ptnr']:8.1f} {m['ms']:8.0f}")
+                      f"{m['ptnr']:8.1f} {m['evals']:8.0f}")
                 data[n]["N"].append(N); data[n]["gain"].append(m["gain"])
                 data[n]["wn"].append(m["worst_null"]); data[n]["ptnr"].append(m["ptnr"])
-                data[n]["ms"].append(m["ms"])
+                data[n]["evals"].append(m["evals"])
             except Exception as e:
                 print(f"  {n:22s} ERROR {repr(e)[:50]}")
     if plot:
@@ -425,11 +424,11 @@ def _plot_scaling(data):
             continue
         lw = 3 if "ours" in n else 1.3
         axes[0].plot(d["N"], d["ptnr"], marker="o", lw=lw, label=n)
-        axes[1].plot(d["N"], d["ms"], marker="o", lw=lw, label=n)
+        axes[1].plot(d["N"], d["evals"], marker="o", lw=lw, label=n)
     for ax in axes:
         ax.set_xscale("log", base=2); ax.grid(alpha=0.3); ax.set_xlabel("N elements")
     axes[0].set_ylabel("PTNR dB"); axes[0].set_title("Nulling quality vs N")
-    axes[1].set_yscale("log"); axes[1].set_ylabel("wall ms"); axes[1].set_title("Runtime vs N")
+    axes[1].set_yscale("log"); axes[1].set_ylabel("Total Oracle Evals"); axes[1].set_title("Runtime vs N")
     axes[1].legend(fontsize=7)
     p = os.path.join(RESULTS, "families_scaling.png")
     fig.tight_layout(); fig.savefig(p, dpi=130); plt.close(fig)
@@ -455,8 +454,8 @@ def main():
     global ELEMENT
     ap = argparse.ArgumentParser()
     ap.add_argument("--N", type=int, default=32)
-    ap.add_argument("--tasks", type=int, default=8)
-    ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--tasks", type=int, default=20)
+    ap.add_argument("--seeds", type=int, default=10)
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--scale", action="store_true")
     ap.add_argument("--plot", action="store_true")
@@ -499,10 +498,10 @@ def main():
     # CSVs
     write_csv(os.path.join(RESULTS, "families_runs.csv"), rows,
               ["solver", "family", "task", "seed", "n_nulls", "ok",
-               "gain", "worst_null", "avg_null", "ptnr", "gain_loss", "evals", "ms"])
+               "gain", "worst_null", "avg_null", "ptnr", "gain_loss", "evals"])
     write_csv(os.path.join(RESULTS, "families_summary.csv"), summary,
               ["solver", "family", "runs", "gain_m", "gain_s", "wn_m", "wn_s",
-               "ptnr_m", "ptnr_s", "loss_m", "loss_s", "evals", "ms",
+               "ptnr_m", "ptnr_s", "loss_m", "loss_s", "evals",
                "s20", "s30", "s40", "s50", "winrate"])
     prof_rows = [dict(solver=n, **{f"tau_{int(t) if t<1e8 else 'inf'}": prof[n][i]
                  for i, t in enumerate(taus)}) for n in names]
