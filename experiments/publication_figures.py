@@ -606,7 +606,6 @@ def fig_beam_patterns(plt, element, N=64):
 # IO helpers
 # --------------------------------------------------------------------------- #
 def save(plt, fig, name):
-    os.makedirs(FIGDIR, exist_ok=True)
     for ext in ("pdf", "png"):
         p = os.path.join(FIGDIR, f"{name}.{ext}")
         fig.savefig(p)
@@ -628,6 +627,7 @@ def write_csv(path, rows, fields):
 # Main
 # --------------------------------------------------------------------------- #
 def main():
+    global FIGDIR
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--N", type=int, default=32)
@@ -638,6 +638,7 @@ def main():
     ap.add_argument("--no-scaling", action="store_true")
     ap.add_argument("--no-realism", action="store_true")
     ap.add_argument("--no-patterns", action="store_true")
+    ap.add_argument("--measured", action="store_true", help="Use MeasuredVaractor instead of SyntheticVaractor")
     args = ap.parse_args()
 
     if args.quick:
@@ -645,8 +646,13 @@ def main():
         args.scale_N = [16, 32, 64]
 
     plt = init_style()
+    if args.measured:
+        from beamformer.element_model import MeasuredVaractor
+        element = MeasuredVaractor(amp_file="VNA Results (1)/WBRO_amplitude.mat", phase_file="VNA Results (1)/WNBRO_phase.mat")
+        FIGDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures_measured")
+    else:
+        element = SyntheticVaractor(beta=0.8, folding=True)
     os.makedirs(FIGDIR, exist_ok=True)
-    element = SyntheticVaractor(beta=0.8, folding=True)
     tasks = make_tasks(args.tasks)
     seeds = list(range(args.seeds))
     names = list(B.SOLVERS.keys())

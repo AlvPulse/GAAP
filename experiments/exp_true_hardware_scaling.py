@@ -27,12 +27,12 @@ from beamformer.pattern_projection import Task
 
 
 class TrueParametricVaractor(SyntheticVaractor):
-    def __init__(self, alpha):
+    def __init__(self, alpha, folding=True):
         """
         alpha: 0.0 = Ideal Uniform Phase Shifter (32 states)
                1.0 = Severe VDIL Varactor (non-uniform phase, deep amplitude dip)
         """
-        super().__init__()
+        super().__init__(folding=folding)
 
         # 1. Base Severe Varactor properties
         severe_phases = np.angle(self.c_grid)
@@ -50,7 +50,7 @@ class TrueParametricVaractor(SyntheticVaractor):
         self.c_grid = interp_amps * np.exp(1j * interp_phases)
 
 
-def run_true_scaling_test(N=64, num_trials=30):
+def run_true_scaling_test(N=64, num_trials=30, folding=True, n_dual_steps=8):
     np.random.seed(42)
     psi_grid = np.linspace(0, 2 * np.pi, 24, endpoint=False)
 
@@ -60,7 +60,7 @@ def run_true_scaling_test(N=64, num_trials=30):
 
     for alpha in alpha_levels:
         print(f"Testing Hardware Impairment Alpha: {alpha:.1f} (0=Ideal, 1=Severe)...")
-        element = TrueParametricVaractor(alpha=alpha)
+        element = TrueParametricVaractor(alpha=alpha, folding=folding)
         opportunity_losses = []
 
         for _ in range(num_trials):
@@ -75,7 +75,7 @@ def run_true_scaling_test(N=64, num_trials=30):
 
             for psi in psi_grid:
                 V_n, c_n, _ = solve_coherent_lcmv(
-                    task, element, N, n_dual_steps=8, psi_grid=[psi], return_history=True
+                    task, element, N, n_dual_steps=n_dual_steps, psi_grid=[psi], return_history=True
                 )
                 pre_gains.append(20 * np.log10(abs(_af(c_n, target_u, N)) / N + 1e-12))
 
@@ -110,5 +110,12 @@ def run_true_scaling_test(N=64, num_trials=30):
     print(df.to_string(index=False))
 
 
+
 if __name__ == "__main__":
-    run_true_scaling_test()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--no-folding", action="store_true", help="Disable phase folding")
+    p.add_argument("--oracle", type=int, default=8, help="Number of dual steps (oracle calls control)")
+    args = p.parse_args()
+
+    run_true_scaling_test(folding=not args.no_folding, n_dual_steps=args.oracle)
