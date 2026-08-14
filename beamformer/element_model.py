@@ -244,3 +244,64 @@ class MeasuredVaractor(ElementData):
 
         idx = np.argmin(distances)
         return self.V_grid[idx], self.c_grid[idx], idx
+
+class WBROMeasuredVaractor(ElementData):
+    """
+    Element data loaded from actual hardware measurements (.mat files) specifically
+    for the WBRO data format (shape 3x61).
+    """
+    def __init__(self, amp_file='WBRO_amplitude.mat', phase_file='WNBRO_phase.mat', freq_idx=1, n_points=500):
+        self.n_points = n_points
+        try:
+            import scipy.io
+            amp_data = scipy.io.loadmat(amp_file)["WBRO_amplitude"]
+            phase_data = scipy.io.loadmat(phase_file)["WBRO_phase"]
+
+            # Row 2 corresponds to 2.455 GHz (freq_idx=2), row 1 to 2.080 GHz (freq_idx=1)
+            a_raw = amp_data[freq_idx]
+            phi_raw = phase_data[freq_idx]
+
+            # Normalize amplitude as in the user's plot script
+            a_norm = a_raw / a_raw[np.argmin(np.abs(phi_raw - 360))]
+
+            # Assuming linear voltage sweep across the length of the arrays
+            # We don't have the exact voltage bounds, so we assume 0 to 15V like the default
+            v_min, v_max = 0.0, 15.0
+            raw_v_grid = np.linspace(v_min, v_max, len(a_norm))
+
+            self.V_grid = np.linspace(v_min, v_max, n_points)
+            A_interp = np.interp(self.V_grid, raw_v_grid, a_norm)
+            phi_interp = np.interp(self.V_grid, raw_v_grid, phi_raw)
+
+            if np.max(np.abs(phi_interp)) > 4 * np.pi:
+                phi_interp = np.deg2rad(phi_interp)
+
+            self.c_grid = A_interp * np.exp(1j * phi_interp)
+            self.v_min = v_min
+            self.v_max = v_max
+        except Exception as e:
+            raise RuntimeError(f"Failed to load or parse WBRO measured data: {e}")
+
+    def get_complex_weight(self, V, f=None):
+        idx = np.searchsorted(self.V_grid, V)
+        idx = np.clip(idx, 0, len(self.V_grid)-1)
+        return self.c_grid[idx]
+
+    def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
+        if method == 'euclidean':
+            distances = np.abs(self.c_grid - target_weight)
+        elif method == 'phase_only' or method == 'phase_dominant':
+            target_phase = np.angle(target_weight)
+            grid_phase = np.angle(self.c_grid)
+            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+            distances = np.abs(phase_diff)
+        elif method == 'hardware_coupled':
+            alpha = w_amp
+            dist_sq = np.abs(self.c_grid - target_weight)**2
+            gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
+            distances = dist_sq + alpha * gain_loss_penalty
+        else:
+            distances = np.abs(self.c_grid - target_weight)
+
+        idx = np.argmin(distances)
+        return self.V_grid[idx], self.c_grid[idx], idx
