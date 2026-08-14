@@ -50,7 +50,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, WBROMeasuredVaractor
 from beamformer import baselines as B
 from experiments.sota_families_benchmark import make_tasks, budgets
 
@@ -638,7 +638,7 @@ def main():
     ap.add_argument("--no-scaling", action="store_true")
     ap.add_argument("--no-realism", action="store_true")
     ap.add_argument("--no-patterns", action="store_true")
-    ap.add_argument("--measured", action="store_true", help="Use MeasuredVaractor instead of SyntheticVaractor")
+    ap.add_argument("--measured", action="store_true", help="Use MeasuredVaractor with .mat files")
     args = ap.parse_args()
 
     if args.quick:
@@ -647,8 +647,11 @@ def main():
 
     plt = init_style()
     if args.measured:
-        from beamformer.element_model import MeasuredVaractor
-        element = MeasuredVaractor(amp_file="VNA Results (1)/WBRO_amplitude.mat", phase_file="VNA Results (1)/WNBRO_phase.mat")
+        from beamformer.element_model import WBROMeasuredVaractor
+        import os
+        amp_file = "WBRO_amplitude.mat" if os.path.exists("WBRO_amplitude.mat") else "VNA Results (1)/WBRO_amplitude.mat"
+        phase_file = "WNBRO_phase.mat" if os.path.exists("WNBRO_phase.mat") else "VNA Results (1)/WNBRO_phase.mat"
+        element = WBROMeasuredVaractor(amp_file=amp_file, phase_file=phase_file)
         FIGDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures_measured")
     else:
         element = SyntheticVaractor(beta=0.8, folding=True)
