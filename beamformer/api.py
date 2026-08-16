@@ -86,7 +86,13 @@ def beamform(
             suppress_sll=kwargs.get('suppress_sll', False),
             **{k: v for k, v in kwargs.items() if k not in ('refine', 'suppress_sll', 'solver')}
         )
-
+    elif solver == 'mrlcmv-convergence':
+        from .coherent_lcmv import beamform_mrlcmv_convergence
+        return beamform_mrlcmv_convergence(
+            task, element, N,
+            suppress_sll=kwargs.get('suppress_sll', False),
+            **{k: v for k, v in kwargs.items() if k not in ('suppress_sll', 'solver')}
+        )
     # Calculate optimal non-projection baseline for reference
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(
         initial_weights, element,

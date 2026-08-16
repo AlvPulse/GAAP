@@ -14,15 +14,16 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.coherent_lcmv import _af, gain_locked_polish, solve_coherent_lcmv
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
 
 
 def run_scaling_experiment():
     np.random.seed(42)
-    element = SyntheticVaractor()
+    # element = SyntheticVaractor()
+    element= MeasuredVaractor()
 
-    N_values = [16, 32, 64, 128]
+    N_values = [16, 32, 64, 128,256,1024]
     null_counts = [1, 2]
     num_trials = 20
 

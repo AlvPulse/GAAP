@@ -5,7 +5,7 @@ import os
 sys.path.append('..')
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.api import beamform
 from beamformer.utils import oversampled_fft
 
@@ -15,8 +15,8 @@ def main():
     # 1. Setup
     N = 64
     task = Task('nulled', target_angles=[0.2], null_angles=[-0.4, 0.5])
-    element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
-
+    #element = SyntheticVaractor(beta=0.8, folding=True) # Severe non-linearity
+    element= MeasuredVaractor()
     debug_dir = os.path.join(os.path.dirname(__file__), 'debug_results_null')
 
     projection_methods = ['euclidean', 'phase_only', 'weighted']

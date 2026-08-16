@@ -17,15 +17,38 @@ from scipy.stats import pearsonr
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.coherent_lcmv import _af, gain_locked_polish, solve_coherent_lcmv
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
+
+def set_ieee_style():
+    """Applies global Matplotlib settings tailored for IEEE double-column papers."""
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+        "font.size": 8,
+        "axes.titlesize": 9,
+        "axes.labelsize": 8,
+        "xtick.labelsize": 7,
+        "ytick.labelsize": 7,
+        "legend.fontsize": 7,
+        "figure.titlesize": 9,
+        "axes.linewidth": 0.8,
+        "grid.linewidth": 0.5,
+        "grid.alpha": 0.4,
+        "grid.linestyle": "--",
+        "lines.linewidth": 1.5,
+        "lines.markersize": 4,
+        "path.simplify": True,
+        "figure.dpi": 300,
+    })
 
 
 def main():
     """Run the investigation and generate the plot."""
     np.random.seed(42)
     N = 64
-    element = SyntheticVaractor()
+    #element = SyntheticVaractor()
+    element = MeasuredVaractor()
 
     # Generate a random task
     target_u = np.random.uniform(-0.5, 0.5)
@@ -68,6 +91,7 @@ def main():
         post_nulls.append(post_null)
         post_ptnrs.append(post_gain - post_null)
 
+    set_ieee_style()
     plt.figure(figsize=(10, 6))
     plt.plot(psi_grid, pre_ptnrs, label="Pre-GLCP PTNR (Anchor)")
     plt.plot(psi_grid, post_ptnrs, label="Post-GLCP PTNR (Anchor + GLCP)")

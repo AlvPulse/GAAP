@@ -36,7 +36,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer import baselines as B
 from experiments.sota_families_benchmark import make_tasks, budgets
 from experiments.publication_figures import (init_style, save, FIGDIR, solver_color,
@@ -223,7 +223,8 @@ def main():
 
     plt = init_style()
     os.makedirs(FIGDIR, exist_ok=True)
-    element = SyntheticVaractor(beta=0.8, folding=True)
+    # element = SyntheticVaractor(beta=0.8, folding=True)
+    element = MeasuredVaractor()
     tasks = make_tasks(args.tasks)
 
     print(f"[A] Robustness Monte-Carlo ({len(tasks)} tasks x {args.draws} draws, N={args.N})")

@@ -43,7 +43,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer import baselines as B
 
 RESULTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
@@ -95,6 +95,7 @@ def budgets(quick=False):
         "OBH-ZKD (prior)":    dict(),
         "MR-LCMV (ours)":     dict(),
         "MR-LCMV+GLCP (ours)":dict(),
+        "MR-LCMV-adaptive":dict(),
     }
     if quick:
         b.update({"PGD": dict(max_iter=60), "Differential Eq.": dict(maxiter=15),
@@ -466,7 +467,8 @@ def main():
     args = ap.parse_args()
 
     os.makedirs(RESULTS, exist_ok=True)
-    ELEMENT = SyntheticVaractor(beta=0.8, folding=True)
+    # ELEMENT = SyntheticVaractor(beta=0.8, folding=True)
+    ELEMENT = MeasuredVaractor()
     if args.quick:
         args.tasks = min(args.tasks, 4); args.seeds = min(args.seeds, 2)
 

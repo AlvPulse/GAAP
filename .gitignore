@@ -48,3 +48,5 @@ experiments/data/sota_benchmark_final.csv
 outcmaes/
 experiments/comprehensive_comparisons/data/
 __pycache__/
+*.zip
+*.pdf

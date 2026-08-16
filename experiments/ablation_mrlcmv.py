@@ -23,7 +23,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.controllers.metrics import get_metrics
 from beamformer.coherent_lcmv import _retract, _af, _get_manifold, gain_locked_polish
 
@@ -155,7 +155,8 @@ def run_case(name, N, task, element):
 
 
 def main():
-    element = SyntheticVaractor(beta=0.8, folding=True)
+    #element = SyntheticVaractor(beta=0.8, folding=True)
+    element = MeasuredVaractor()
     cases = [
         ("Canonical", 64, Task("nulled", target_angles=[0.2], null_angles=[-0.4, 0.5])),
         ("Steered",   32, Task("nulled", target_angles=[-0.3], null_angles=[0.1, 0.5])),

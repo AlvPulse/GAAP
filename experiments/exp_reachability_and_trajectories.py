@@ -18,8 +18,30 @@ from scipy.stats import pearsonr, bootstrap
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.coherent_lcmv import _af, solve_coherent_lcmv, _get_manifold
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
+
+def set_ieee_style():
+    """Applies global Matplotlib settings tailored for IEEE double-column papers."""
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+        "font.size": 20,
+        "axes.titlesize": 20,
+        "axes.labelsize": 20,
+        "xtick.labelsize": 7,
+        "ytick.labelsize": 7,
+        "legend.fontsize": 12,
+        "figure.titlesize": 20,
+        "axes.linewidth": 0.8,
+        "grid.linewidth": 0.5,
+        "grid.alpha": 0.4,
+        "grid.linestyle": "--",
+        "lines.linewidth": 2,
+        "lines.markersize": 4,
+        "path.simplify": True,
+        "figure.dpi": 300,
+    })
 
 
 def measure_local_reachability(c_n, V_n, task, element, N):
@@ -117,8 +139,8 @@ def tracking_glcp(c_n, V_n, task, element, null_angles, rounds=6, gain_floor=0.9
 def main():
     np.random.seed(102) # Fixed seed for reproducible presentation
     N = 64
-    element = SyntheticVaractor()
-
+    #element = SyntheticVaractor()
+    element = MeasuredVaractor()
     target_u = np.random.uniform(-0.5, 0.5)
     null_u = np.random.uniform(-0.8, 0.8)
     while abs(null_u - target_u) < 0.15:
@@ -148,7 +170,7 @@ def main():
         accepted_moves_list.append(moves)
         post_ptnrs.append(traj[-1])
         trajectories[psi] = traj
-
+    set_ieee_style()
     # --- Plot 1: The Causal Verification (Reach vs Moves vs PTNR) ---
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
@@ -183,7 +205,7 @@ def main():
     plt.xlabel("Cumulative Accepted GLCP Moves (Iterations)")
     plt.ylabel("PTNR (dB)")
     plt.title("GLCP Trajectory Divergence Driven by Psi Basin")
-    plt.legend()
+    plt.legend(loc="lower right")
     plt.grid(True)
     plt.savefig("experiments/trajectory_divergence.png")
 

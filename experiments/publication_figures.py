@@ -50,7 +50,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer import baselines as B
 from experiments.sota_families_benchmark import make_tasks, budgets
 
@@ -122,6 +122,7 @@ FAMILY_STYLE = {
 }
 OURS_COLOR = "#C81E2E"
 OURS_LO_COLOR = "#F08C00"   # bare anchor: amber, to distinguish from +GLCP
+
 
 
 def solver_color(name, family):
@@ -444,7 +445,7 @@ def fig_cost_quality(plt, summary):
     ax.set_ylabel("Peak-to-null ratio (dB)  better $\\uparrow$")
     ax.set_title("Efficiency frontier: nulling quality per oracle call\n"
                  "(top-left = high quality at low cost)")
-    ax.legend(title="family", loc="lower left", ncol=2)
+    ax.legend(title="family", loc="upper right", ncol=2)
     ax.grid(alpha=0.3, which="both")
     save(plt, fig, "fig6_cost_quality")
 
@@ -504,7 +505,7 @@ def fig_scaling(plt, data):
 def run_realism(element, tasks, N=32, quick=False):
     bud = budgets(quick)
     names = list(B.SOLVERS.keys())
-    sub = tasks[:min(4, len(tasks))]
+    sub = tasks[:min(2, len(tasks))]
     out = []
     for name in names:
         res = {}
@@ -634,7 +635,7 @@ def main():
     ap.add_argument("--tasks", type=int, default=8)
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--quick", action="store_true", help="tiny fast smoke run")
-    ap.add_argument("--scale-N", type=int, nargs="+", default=[16, 32, 64, 128])
+    ap.add_argument("--scale-N", type=int, nargs="+", default=[16, 32, 64, 128, 256, 1024])
     ap.add_argument("--no-scaling", action="store_true")
     ap.add_argument("--no-realism", action="store_true")
     ap.add_argument("--no-patterns", action="store_true")
@@ -646,7 +647,8 @@ def main():
 
     plt = init_style()
     os.makedirs(FIGDIR, exist_ok=True)
-    element = SyntheticVaractor(beta=0.8, folding=True)
+    #element = SyntheticVaractor(beta=0.8, folding=True)
+    element= MeasuredVaractor()
     tasks = make_tasks(args.tasks)
     seeds = list(range(args.seeds))
     names = list(B.SOLVERS.keys())

@@ -153,94 +153,135 @@ class IdealElement(ElementData):
         return self.V_grid[idx], self.c_grid[idx], idx
 
 
-import scipy.io
+import scipy.io as sio
+from scipy.interpolate import interp1d
 
 class MeasuredVaractor(ElementData):
     """
-    Element data loaded from actual hardware measurements (.mat files).
-    Assumes amplitude and phase matrices have matching voltage sweeps.
+    Element data loaded from hardware measurements (.mat files).
+    
+    Parses WBRO_phase and WBRO_amplitude matrices of shape (3, N_bias)
+    for specific operating frequencies.
     """
-    def __init__(self, amp_file='amplitude.mat', phase_file='phase.mat',
-                 v_min=0.0, v_max=15.0, n_points=500):
+
+    FREQ_INDEX = {"1.690": 0, "2.080": 1, "2.455": 2}
+
+    def __init__(
+        self,
+        amp_file='WBRO_amplitude.mat',
+        phase_file='WNBRO_phase.mat',
+        freq='2.080',
+        v_min=0.0,
+        v_max=12.0,
+        n_points=500
+    ):
         self.v_min = v_min
         self.v_max = v_max
         self.n_points = n_points
+        self.freq_str = str(freq)
+
+        if self.freq_str not in self.FREQ_INDEX:
+            raise ValueError(f"Unsupported frequency '{freq}'. Choose from {list(self.FREQ_INDEX.keys())}")
+
+        freq_idx = self.FREQ_INDEX[self.freq_str]
 
         try:
-            # We look for the first valid numerical array in the .mat dictionaries
-            amp_data = scipy.io.loadmat(amp_file)
-            phase_data = scipy.io.loadmat(phase_file)
+            phase_mat = sio.loadmat(amp_file if 'phase' in amp_file else phase_file)
+            amp_mat = sio.loadmat(phase_file if 'amplitude' in phase_file else amp_file)
 
-            # Extract first non-metadata array
-            A_raw = next(val for key, val in amp_data.items() if not key.startswith('__'))
-            phi_raw = next(val for key, val in phase_data.items() if not key.startswith('__'))
+            # Robust fallback lookup for variable names
+            phi_raw = phase_mat.get("WBRO_phase", phase_mat.get("WNBRO_phase"))
+            A_raw = amp_mat.get("WBRO_amplitude")
 
-            # Flatten to 1D
-            A_raw = np.array(A_raw).flatten()
-            phi_raw = np.array(phi_raw).flatten()
+            np.savetxt('phase_output.csv', phi_raw, delimiter=',', fmt='%f')
 
-            # Assuming linear voltage sweep across the length of the arrays
-            raw_v_grid = np.linspace(v_min, v_max, len(A_raw))
+            # 3. Save the Amplitude data to a CSV file
+            np.savetxt('amplitude_output.csv', A_raw, delimiter=',', fmt='%f')
 
-            # Interpolate onto a standardized high-resolution dense grid for fast projection
+            print("CSV files saved successfully!")
+
+            if phi_raw is None or A_raw is None:
+                raise KeyError("Could not find 'WBRO_phase' or 'WBRO_amplitude' variables in .mat files.")
+
+            # Extract selected frequency sweep line: shape (N_bias,)
+            phi_freq = phi_raw[freq_idx, :]
+            A_freq = A_raw[freq_idx, :]
+
+            # Normalization logic identical to plot script:
+            # Normalize amplitude against value at phase nearest to 360 degrees
+            ref_idx = np.argmin(np.abs(phi_freq - 360.0))
+            ref_val = A_freq[ref_idx] if A_freq[ref_idx] != 0 else 1.0
+            A_norm = A_freq / ref_val
+
+            # Measured bias grid (assuming uniform step across raw samples)
+            n_raw = len(A_norm)
+            raw_v_grid = np.linspace(v_min, v_max, n_raw)
+
+            # Build standardized, high-density interpolation grid for discrete projection
             self.V_grid = np.linspace(v_min, v_max, n_points)
-            A_interp = np.interp(self.V_grid, raw_v_grid, A_raw)
-            phi_interp = np.interp(self.V_grid, raw_v_grid, phi_raw)
+            
+            # Interpolate Amplitude and Phase onto dense grid
+            A_interp = np.interp(self.V_grid, raw_v_grid, A_norm)
+            phi_interp = np.interp(self.V_grid, raw_v_grid, phi_freq)
 
-            # Convert degrees to radians if necessary
-            if np.max(np.abs(phi_interp)) > 4 * np.pi: # likely degrees
-                phi_interp = np.deg2rad(phi_interp)
+            # Compute complex response (degrees to radians conversion)
+            self.c_grid = A_interp * np.exp(1j * np.deg2rad(phi_interp))
 
-            # Normalize amplitude if max is > 1
-            if np.max(A_interp) > 1.0:
-                A_interp = A_interp / np.max(A_interp)
-
-            self.c_grid = A_interp * np.exp(1j * phi_interp)
+            # Continuous interpolators for smooth get_complex_weight lookup
+            self._interp_real = interp1d(self.V_grid, self.c_grid.real, kind='linear', fill_value='extrapolate')
+            self._interp_imag = interp1d(self.V_grid, self.c_grid.imag, kind='linear', fill_value='extrapolate')
 
         except Exception as e:
-            raise RuntimeError(f"Failed to load or parse measured data: {e}")
+            raise RuntimeError(f"Failed to load or parse measured data: {e}") from e
 
     def get_complex_weight(self, V, f=None):
-        # We can just interpolate from the high-res grid
-        # For an array V, map to indices
-        idx = np.searchsorted(self.V_grid, V)
-        idx = np.clip(idx, 0, len(self.V_grid)-1)
-        return self.c_grid[idx]
+        """
+        Evaluates the complex weight at bias voltage V.
+        Supports scalar inputs or NumPy arrays.
+        """
+        V_arr = np.asarray(V)
+        re = self._interp_real(V_arr)
+        im = self._interp_imag(V_arr)
+        c = re + 1j * im
+        return c.item() if np.ndim(V) == 0 else c
 
     def project(self, target_weight, method='euclidean', w_phase=1.0, w_amp=0.5):
-        if method == 'euclidean':
-            distances = np.abs(self.c_grid - target_weight)
-        elif method == 'phase_only' or method == 'phase_dominant':
-            target_phase = np.angle(target_weight)
-            grid_phase = np.angle(self.c_grid)
-            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
-            distances = np.abs(phase_diff)
-        elif method == 'gain_steering_weighted':
-            inner_product = np.real(target_weight * np.conj(self.c_grid))
-            distances = -inner_product
-        elif method == 'weighted':
-            target_phase = np.angle(target_weight)
-            target_amp = np.abs(target_weight)
-            grid_phase = np.angle(self.c_grid)
-            grid_amp = np.abs(self.c_grid)
+            if method == 'euclidean':
+                distances = np.abs(self.c_grid - target_weight)
+            elif method == 'phase_only' or method == 'phase_dominant':
+                target_phase = np.angle(target_weight)
+                grid_phase = np.angle(self.c_grid)
+                phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+                distances = np.abs(phase_diff)
+            elif method == 'gain_steering_weighted':
+                inner_product = np.real(target_weight * np.conj(self.c_grid))
+                distances = -inner_product
+            elif method == 'weighted':
+                target_phase = np.angle(target_weight)
+                target_amp = np.abs(target_weight)
+                grid_phase = np.angle(self.c_grid)
+                grid_amp = np.abs(self.c_grid)
+    
+                phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
+                amp_diff = np.abs(grid_amp - target_amp)
+                distances = w_phase * phase_diff + w_amp * amp_diff
+            elif method == 'hardware_coupled':
+                # V_n = argmin ( |c_n(s) - w_n|^2 + alpha * Gain_Loss_Penalty(s) )
+                # Gain_Loss_Penalty is (1 - |c_n(s)|)^2
+                alpha = w_amp # we'll map preserve_gain_weight to w_amp, but we will assume default 0.5 if not passed
+                dist_sq = np.abs(self.c_grid - target_weight)**2
+                gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
+                distances = dist_sq + alpha * gain_loss_penalty
+            elif method == 'phase_only_match':
+                target_phase = np.angle(target_weight)
+                grid_phase = np.angle(self.c_grid)
+                phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
+                distances = np.abs(phase_diff)
+            else:
+                raise ValueError(f"Unknown projection method: {method}")
+    
+            idx = np.argmin(distances)
+            return self.V_grid[idx], self.c_grid[idx], idx
 
-            phase_diff = np.abs(np.angle(np.exp(1j * (grid_phase - target_phase))))
-            amp_diff = np.abs(grid_amp - target_amp)
-            distances = w_phase * phase_diff + w_amp * amp_diff
-        elif method == 'hardware_coupled':
-            # V_n = argmin ( |c_n(s) - w_n|^2 + alpha * Gain_Loss_Penalty(s) )
-            # Gain_Loss_Penalty is (1 - |c_n(s)|)^2
-            alpha = w_amp # we'll map preserve_gain_weight to w_amp, but we will assume default 0.5 if not passed
-            dist_sq = np.abs(self.c_grid - target_weight)**2
-            gain_loss_penalty = (1.0 - np.abs(self.c_grid))**2
-            distances = dist_sq + alpha * gain_loss_penalty
-        elif method == 'phase_only_match':
-            target_phase = np.angle(target_weight)
-            grid_phase = np.angle(self.c_grid)
-            phase_diff = np.angle(np.exp(1j * (grid_phase - target_phase)))
-            distances = np.abs(phase_diff)
-        else:
-            raise ValueError(f"Unknown projection method: {method}")
-
-        idx = np.argmin(distances)
-        return self.V_grid[idx], self.c_grid[idx], idx
+if __name__ == "__main__":
+    MeasuredVaractor()

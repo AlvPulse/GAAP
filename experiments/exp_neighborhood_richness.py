@@ -16,7 +16,7 @@ from scipy.stats import pearsonr
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.coherent_lcmv import _af, solve_coherent_lcmv, _get_manifold
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
 
 
@@ -67,8 +67,8 @@ def measure_neighborhood_richness(c_n, V_n, task, element, N):
 def main():
     np.random.seed(101)
     N = 64
-    element = SyntheticVaractor()
-
+    #element = SyntheticVaractor()
+    element = MeasuredVaractor()
     target_u = np.random.uniform(-0.5, 0.5)
     null_u = np.random.uniform(-0.8, 0.8)
     while abs(null_u - target_u) < 0.15:
