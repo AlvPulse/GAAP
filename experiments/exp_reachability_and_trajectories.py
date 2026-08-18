@@ -17,7 +17,7 @@ from scipy.stats import pearsonr, bootstrap
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from beamformer.coherent_lcmv import _af, solve_coherent_lcmv, _get_manifold
+from beamformer.MR_LCMV_certified import _af, solve_coherent_lcmv, _get_manifold
 from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
 

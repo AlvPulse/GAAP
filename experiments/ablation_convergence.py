@@ -34,7 +34,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.api import beamform
 from beamformer.controllers.metrics import get_metrics
 from beamformer import baselines as B
@@ -59,6 +59,7 @@ CONV = [
     ("Differential Eq.",   "maxiter", [10, 20, 40, 80]),
 ]
 OURS = "MR-LCMV+GLCP (ours)"
+GCLP_ROUNDS= [1,2,3,4,5,6,7,8,9]
 
 
 # --------------------------------------------------------------------------- #
@@ -107,6 +108,15 @@ def fig_ablation(plt, data):
 # --------------------------------------------------------------------------- #
 def run_convergence(element, tasks, N):
     traj = {}
+    oet, owt=[],[]
+    for round_num in GCLP_ROUNDS:
+        oe, ow,ou = [], [],[]
+        for task in tasks:
+            m = B.run_solver(OURS, task, element, N, seed=0, discrete=True,n_dual_steps= round_num)
+            oe.append(m["evals"]); ow.append(m["worst_null"]);ou.append(m["glcp_updates"])
+        oet.append(np.mean(oe));owt.append(np.mean(ow))
+    traj[OURS] = (oet, owt)
+    print(traj)
     for name, kw, levels in CONV:
         ev, wn = [], []
         for lv in levels:
@@ -122,11 +132,7 @@ def run_convergence(element, tasks, N):
         traj[name] = (ev, wn)
         print(f"  convergence trace: {name}")
     # ours: single fixed-cost point (mean over tasks)
-    oe, ow = [], []
-    for task in tasks:
-        m = B.run_solver(OURS, task, element, N, seed=0, discrete=True)
-        oe.append(m["evals"]); ow.append(m["worst_null"])
-    traj[OURS] = ([np.mean(oe)], [np.mean(ow)])
+    
     return traj
 
 
@@ -161,7 +167,8 @@ def main():
 
     plt = init_style()
     os.makedirs(FIGDIR, exist_ok=True)
-    element = SyntheticVaractor(beta=0.8, folding=True)
+    #element = SyntheticVaractor(beta=0.8, folding=True)
+    element = MeasuredVaractor()
     tasks = make_tasks(args.tasks)
 
     print(f"[A] Ablation ({len(tasks)} tasks, N={args.N})")
@@ -173,7 +180,7 @@ def main():
 
     print(f"[B] Convergence trace ({len(tasks)} tasks, N={args.N})")
     traj = run_convergence(element, tasks, args.N)
-    fig_convergence(plt, traj)
+    
 
     with open(os.path.join(FIGDIR, "pub_ablation.csv"), "w", newline="") as f:
         w = csv.writer(f); w.writerow(["variant", "task_idx", "ptnr"])
@@ -185,6 +192,7 @@ def main():
         for name, (ev, wn) in traj.items():
             for e, n_ in zip(ev, wn):
                 w.writerow([name, e, n_])
+    fig_convergence(plt, traj)
     print(f"\nDone. fig14/fig15 + pub_ablation.csv + pub_convergence.csv in {FIGDIR}")
 
 

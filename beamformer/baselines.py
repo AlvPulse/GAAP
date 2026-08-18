@@ -443,11 +443,11 @@ def solve_obh_zkd(prob, rng, K=8, max_hops=10, T=0.1):
 # --------------------------------------------------------------------------- #
 # Ours
 # --------------------------------------------------------------------------- #
-def solve_ours(prob, rng, refine="glcp", gauge="ptnr"):
+def solve_ours(prob, rng, refine="glcp", gauge="ptnr", n_dual_steps=1):
     from .api import beamform
     from . import coherent_lcmv as CL
     CL.reset_counters()
-    res = beamform(prob.task, prob.element, N=prob.N, solver="mrlcmv",
+    res = beamform(prob.task, prob.element, N=prob.N, solver="mrlcmv",n_dual_steps= n_dual_steps,
                    refine=refine, gauge=gauge)
     # Report the same cost currency as the iterative/DFO baselines: number of
     # full forward-model (array-factor) evaluations. GLCP's committed coordinate
@@ -463,19 +463,68 @@ def solve_ours_none(prob, rng, gauge="ptnr"):
     """Bare MR-LCMV (closed-form anchor + dual + gauge), no GLCP polish."""
     return solve_ours(prob, rng, refine="none", gauge=gauge)
 
-def solve_ours_adaptive(prob, refine="glcp", gauge="ptnr"):
+def solve_ours_certified(prob, rng, refine="glcp", gauge="ptnr", null_target=-60):
+    """
+    Adaptive/convergence MR-LCMV adapter for the SOTA benchmark.
+
+    The benchmark interface is intentionally identical to all other solvers:
+        solve_xxx(prob, rng, ...)
+
+    rng is accepted for API compatibility and reproducibility. The MR-LCMV
+    algorithm itself is deterministic for a fixed task/manifold.
+    """
     from .api import beamform
-    from . import coherent_lcmv as CL
+    from . import MR_LCMV_certified as CL
+
     CL.reset_counters()
-    res = beamform(prob.task, prob.element, N=prob.N, solver="mrlcmv-convergence",
-                       refine=refine, gauge=gauge)
-    # Report the same cost currency as the iterative/DFO baselines: number of
-    # full forward-model (array-factor) evaluations. GLCP's committed coordinate
-    # moves use O(M) incremental updates (no full evaluation), so they are tracked
-    # separately on the Problem and surfaced as a distinct column.
+
+    res = beamform(
+        prob.task,
+        prob.element,
+        N=prob.N,
+        solver="mrlcmv-certified",
+        refine=refine,
+        gauge=gauge,
+        null_target_db= null_target
+    )
+
     full_evals, glcp_updates = CL.get_counters()
+
     prob.eval_count = full_evals
     prob.glcp_updates = glcp_updates
+
+    return res["voltages"]
+
+def solve_ours_adaptive(prob, rng, refine="glcp", gauge="ptnr"):
+    """
+    Adaptive/convergence MR-LCMV adapter for the SOTA benchmark.
+
+    The benchmark interface is intentionally identical to all other solvers:
+        solve_xxx(prob, rng, ...)
+
+    rng is accepted for API compatibility and reproducibility. The MR-LCMV
+    algorithm itself is deterministic for a fixed task/manifold.
+    """
+    from .api import beamform
+    from . import MR_LCMV_certified as CL
+
+    CL.reset_counters()
+
+    res = beamform(
+        prob.task,
+        prob.element,
+        N=prob.N,
+        solver="mrlcmv-adaptive",
+        refine=refine,
+        gauge=gauge,
+    )
+
+    full_evals, glcp_updates = CL.get_counters()
+
+    prob.eval_count = full_evals
+    prob.glcp_updates = glcp_updates
+
+    return res["voltages"]
 
 
 # Registry: name -> (fn, family, stochastic?)
@@ -496,7 +545,8 @@ SOLVERS = {
     "OBH-ZKD (prior)":   (solve_obh_zkd,      "Prior proposed", True),
     "MR-LCMV (ours)":    (solve_ours_none,    "Ours",           False),
     "MR-LCMV+GLCP (ours)":(solve_ours,        "Ours",           False),
-    "MR-LCMV-adaptive":(solve_ours_adaptive,"Ours",False)
+    "MR-LCMV-certified":(solve_ours_certified,"Ours",           False),
+    "MR-LCMV-adaptive": (solve_ours_adaptive, "Ours",           False,)
 }
 
 

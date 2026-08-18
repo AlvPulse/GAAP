@@ -240,6 +240,7 @@ def solve_coherent_lcmv(
     else:
         psis = np.atleast_1d(np.asarray(psi_grid, dtype=float))
     for psi in psis:
+        #print("====", psi, null_list)
         c, V, _ = solve_for_gauge(psi, null_list, A, Ginv)
         sc, g_db = score_solution(c)
         if best_pack is None or sc > best_pack[0]:
@@ -412,6 +413,7 @@ def beamform_mrlcmv(
         sll_outer_rounds=kwargs.get("sll_outer_rounds", 2),
         oversample_factor=kwargs.get("oversample_factor", 8),
     )
+    # print("n_dual_steps",solve_kwargsn_dual_steps)
     nulls = list(task.null_angles) if getattr(task, "null_angles", None) else []
     u_t = task.target_angles[0]
 

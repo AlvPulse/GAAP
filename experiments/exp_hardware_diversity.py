@@ -19,7 +19,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from beamformer.coherent_lcmv import _af, gain_locked_polish, solve_coherent_lcmv
+from beamformer.coherent_lcmv import _af, gain_locked_polish, solve_coherent_lcmv, solve_coherent_lcmv_convergence
 from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
 
@@ -67,9 +67,13 @@ def run_hardware_test(element, N, num_trials=30):
         post_ptnrs = []
 
         for psi in psi_grid:
-            V_n, c_n, _ = solve_coherent_lcmv(
-                task, element, N, n_dual_steps=8, psi_grid=[psi], return_history=True
-            )
+            # V_n, c_n, _ = solve_coherent_lcmv(
+            #     task, element, N, n_dual_steps=8, psi_grid=[psi], return_history=True
+            # )
+
+            V_n, c_n, _ = solve_coherent_lcmv_convergence(
+                            task, element, N, psi_grid=[psi], return_history=True
+                        )
             pre_gain = 20 * np.log10(abs(_af(c_n, target_u, N)) / N + 1e-12)
             pre_gains.append(pre_gain)
 

@@ -59,9 +59,9 @@ from experiments.sota_families_benchmark import make_tasks, budgets
 # --------------------------------------------------------------------------- #
 FIGDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 THRESHOLDS = [-20.0, -30.0, -40.0, -50.0]   # worst-null success levels (dB)
-PROFILE_DB = -30.0                           # "solved" = worst null <= this (dB)
+PROFILE_DB = -40.0                           # "solved" = worst null <= this (dB)
 WIN_TOL = 0.5                                # dB tolerance for a PTNR win
-OURS_HI = "MR-LCMV+GLCP (ours)"
+OURS_HI = "MR-LCMV-certified"
 OURS_LO = "MR-LCMV (ours)"
 
 # Solvers omitted from the N-scaling study: their decision dimension IS N, so
@@ -73,6 +73,35 @@ SCALE_SUBSET = ["Coordinate Descent", "Riemannian CG", "Scaled ADMM",
 def is_ours(name):
     return "ours" in name.lower()
 
+import json
+from pathlib import Path
+
+
+def save_task_suite(tasks, path):
+    """
+    Save the exact spatial task suite used in an experiment.
+    """
+    payload = []
+
+    for i, task in enumerate(tasks):
+        payload.append({
+            "task_id": i,
+            "type": getattr(task, "type", "nulled"),
+            "target_angles": [
+                float(x) for x in task.target_angles
+            ],
+            "null_angles": [
+                float(x) for x in task.null_angles
+            ],
+        })
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    return path
 
 # --------------------------------------------------------------------------- #
 # Matplotlib style (journal-grade, colorblind-aware)
@@ -453,7 +482,7 @@ def fig_cost_quality(plt, summary):
 # --------------------------------------------------------------------------- #
 # Figure 7 -- scaling vs N
 # --------------------------------------------------------------------------- #
-def run_scaling(element, Ns, quick=False):
+def run_scaling_prev(element, Ns, quick=False):
     task = Task("nulled", target_angles=[0.2], null_angles=[-0.4, 0.5])
     data = {n: dict(N=[], ptnr=[], wn=[], evals=[], glcp=[]) for n in SCALE_SUBSET}
     for N in Ns:
@@ -472,8 +501,610 @@ def run_scaling(element, Ns, quick=False):
         sys.stderr.write(f"  scaling: N={N} done\n")
     return data
 
+def run_scaling(
+    element,
+    Ns,
+    tasks,
+    seeds,
+    quick=False,
+    discrete=True,
+):
+    """
+    Statistical scaling experiment.
 
-def fig_scaling(plt, data):
+    Experimental design
+    -------------------
+    Deterministic solvers:
+        1 run per task
+
+    Stochastic solvers:
+        len(seeds) independent runs per task
+
+    Every solver sees exactly the same task suite at every N.
+
+    Returns
+    -------
+    list[dict]
+        One raw record per (solver, N, task, seed_used).
+    """
+
+    solver_budgets = budgets(quick=quick)
+
+    records = []
+
+    # Solver registry stores:
+    # (solver_fn, family, stochastic?)
+    for solver in SCALE_SUBSET:
+
+        if solver not in B.SOLVERS:
+            raise KeyError(
+                f"Scaling solver {solver!r} is not present in B.SOLVERS"
+            )
+
+    total_jobs = 0
+
+    for solver in SCALE_SUBSET:
+        is_stochastic = bool(B.SOLVERS[solver][2])
+
+        n_runs_per_task = len(seeds) if is_stochastic else 1
+
+        total_jobs += (
+            len(Ns)
+            * len(tasks)
+            * n_runs_per_task
+        )
+
+    completed = 0
+
+    for N in Ns:
+
+        print(
+            f"[scaling] N={N}: "
+            f"{len(tasks)} tasks, "
+            f"{len(SCALE_SUBSET)} solvers"
+        )
+
+        for task_id, task in enumerate(tasks):
+
+            for solver in SCALE_SUBSET:
+
+                is_stochastic = bool(
+                    B.SOLVERS[solver][2]
+                )
+
+                # Deterministic solvers:
+                # task is the source of variability, not seed.
+                #
+                # Stochastic solvers:
+                # use all requested seeds.
+                run_seeds = (
+                    seeds if is_stochastic
+                    else [seeds[0]]
+                )
+
+                cfg = dict(
+                    solver_budgets.get(solver, {})
+                )
+
+                for seed in run_seeds:
+
+                    try:
+                        m = B.run_solver(
+                            solver,
+                            task,
+                            element,
+                            N,
+                            seed=seed,
+                            discrete=discrete,
+                            **cfg,
+                        )
+
+                        record = {
+                            "solver": solver,
+                            "N": int(N),
+                            "task_id": int(task_id),
+                            "seed": int(seed),
+                            "stochastic": is_stochastic,
+
+                            # Problem definition
+                            "target_angle": float(
+                                task.target_angles[0]
+                            ),
+                            "null_angles": [
+                                float(x)
+                                for x in task.null_angles
+                            ],
+                            "num_nulls": int(
+                                len(task.null_angles)
+                            ),
+
+                            # Performance
+                            "ptnr": float(m["ptnr"]),
+                            "worst_null": float(
+                                m["worst_null"]
+                            ),
+                            "avg_null": float(
+                                m["avg_null"]
+                            ),
+                            "gain": float(m["gain"]),
+                            "gain_loss": float(
+                                m["gain_loss"]
+                            ),
+
+                            # Computational bookkeeping
+                            "evals": (
+                                float(m["evals"])
+                                if m.get("evals") is not None
+                                else np.nan
+                            ),
+                            "glcp_updates": float(
+                                m.get("glcp_updates", 0)
+                            ),
+
+                            # Optional solver metadata
+                            "family": m.get(
+                                "family",
+                                B.SOLVERS[solver][1],
+                            ),
+                        }
+
+                        records.append(record)
+
+                    except Exception as exc:
+
+                        records.append({
+                            "solver": solver,
+                            "N": int(N),
+                            "task_id": int(task_id),
+                            "seed": int(seed),
+                            "stochastic": is_stochastic,
+
+                            "target_angle": float(
+                                task.target_angles[0]
+                            ),
+                            "null_angles": [
+                                float(x)
+                                for x in task.null_angles
+                            ],
+                            "num_nulls": int(
+                                len(task.null_angles)
+                            ),
+
+                            "ptnr": np.nan,
+                            "worst_null": np.nan,
+                            "avg_null": np.nan,
+                            "gain": np.nan,
+                            "gain_loss": np.nan,
+                            "evals": np.nan,
+                            "glcp_updates": np.nan,
+
+                            "family": B.SOLVERS[solver][1],
+                            "error": repr(exc),
+                        })
+
+                    completed += 1
+
+                    if completed % 50 == 0:
+                        print(
+                            f"[scaling] "
+                            f"{completed}/{total_jobs} runs complete"
+                        )
+
+    return records
+
+def aggregate_scaling_by_task(
+    records,
+    metric,
+):
+    """
+    Reduce raw scaling records to one observation per task
+    for each (solver, N).
+
+    Deterministic solvers already have one run/task.
+
+    Stochastic solvers:
+        median over seeds within each task.
+
+    Returns
+    -------
+    dict:
+        summary[solver][N] -> 1D array over tasks
+    """
+
+    grouped = {}
+
+    for r in records:
+
+        value = r.get(metric, np.nan)
+
+        if not np.isfinite(value):
+            continue
+
+        key = (
+            r["solver"],
+            int(r["N"]),
+            int(r["task_id"]),
+        )
+
+        grouped.setdefault(key, []).append(
+            float(value)
+        )
+
+    summary = {}
+
+    for (solver, N, task_id), values in grouped.items():
+
+        task_value = float(
+            np.median(values)
+        )
+
+        summary.setdefault(solver, {})
+        summary[solver].setdefault(N, {})
+        summary[solver][N][task_id] = task_value
+
+    # Convert each N/task dictionary into an array
+    # sorted by task ID.
+    for solver in summary:
+
+        for N in summary[solver]:
+
+            task_dict = summary[solver][N]
+
+            summary[solver][N] = np.asarray(
+                [
+                    task_dict[k]
+                    for k in sorted(task_dict)
+                ],
+                dtype=float,
+            )
+
+    return summary
+
+
+def bootstrap_ci(
+    values,
+    statistic=np.median,
+    n_boot=5000,
+    confidence=0.95,
+    seed=12345,
+):
+    """
+    Nonparametric bootstrap confidence interval.
+
+    The input values must already represent one independent
+    observation per task.
+    """
+    x = np.asarray(values, dtype=float)
+    x = x[np.isfinite(x)]
+
+    if x.size == 0:
+        return np.nan, np.nan, np.nan
+
+    center = float(statistic(x))
+
+    if x.size == 1:
+        return center, center, center
+
+    rng = np.random.default_rng(seed)
+
+    idx = rng.integers(
+        0,
+        x.size,
+        size=(n_boot, x.size),
+    )
+
+    boot = statistic(
+        x[idx],
+        axis=1,
+    )
+
+    alpha = 1.0 - confidence
+
+    lo = float(
+        np.quantile(boot, alpha / 2.0)
+    )
+    hi = float(
+        np.quantile(boot, 1.0 - alpha / 2.0)
+    )
+
+    return center, lo, hi
+
+
+def bootstrap_ci(
+    values,
+    statistic=np.median,
+    n_boot=5000,
+    confidence=0.95,
+    seed=12345,
+):
+    """
+    Nonparametric bootstrap confidence interval.
+
+    The input values must already represent one independent
+    observation per task.
+    """
+    x = np.asarray(values, dtype=float)
+    x = x[np.isfinite(x)]
+
+    if x.size == 0:
+        return np.nan, np.nan, np.nan
+
+    center = float(statistic(x))
+
+    if x.size == 1:
+        return center, center, center
+
+    rng = np.random.default_rng(seed)
+
+    idx = rng.integers(
+        0,
+        x.size,
+        size=(n_boot, x.size),
+    )
+
+    boot = statistic(
+        x[idx],
+        axis=1,
+    )
+
+    alpha = 1.0 - confidence
+
+    lo = float(
+        np.quantile(boot, alpha / 2.0)
+    )
+    hi = float(
+        np.quantile(boot, 1.0 - alpha / 2.0)
+    )
+
+    return center, lo, hi
+
+def paired_task_differences(
+    records,
+    reference_solver,
+    comparison_solver,
+    metric="ptnr",
+):
+    """
+    Compute paired task-level differences:
+        reference - comparison.
+
+    For stochastic comparison solvers, first take the median
+    over seeds within each task.
+    """
+
+    grouped = {}
+
+    for r in records:
+
+        value = r.get(metric, np.nan)
+
+        if not np.isfinite(value):
+            continue
+
+        key = (
+            r["solver"],
+            int(r["N"]),
+            int(r["task_id"]),
+        )
+
+        grouped.setdefault(key, []).append(
+            float(value)
+        )
+
+    ref = {}
+    cmp = {}
+
+    for (solver, N, task_id), values in grouped.items():
+
+        task_value = float(
+            np.median(values)
+        )
+
+        if solver == reference_solver:
+            ref[(N, task_id)] = task_value
+
+        elif solver == comparison_solver:
+            cmp[(N, task_id)] = task_value
+
+    result = {}
+
+    for key in sorted(
+        set(ref).intersection(cmp)
+    ):
+
+        N, task_id = key
+
+        result.setdefault(N, []).append(
+            ref[key] - cmp[key]
+        )
+
+    for N in result:
+        result[N] = np.asarray(
+            result[N],
+            dtype=float,
+        )
+
+    return result
+
+def bootstrap_scaling_exponent(
+    task_summary,
+    n_boot=5000,
+    seed=12345,
+):
+    """
+    Estimate empirical scaling exponent alpha in
+
+        y(N) = a * N^alpha
+
+    using the task-level median metric at each N.
+
+    Returns
+    -------
+    dict with:
+        alpha
+        alpha_lo
+        alpha_hi
+        intercept
+        r2
+    """
+
+    Ns = sorted(task_summary.keys())
+
+    if len(Ns) < 3:
+        raise ValueError(
+            "At least three N values are required "
+            "for empirical scaling analysis."
+        )
+
+    # Aggregate each N first.
+    medians = []
+
+    for N in Ns:
+
+        x = np.asarray(
+            task_summary[N],
+            dtype=float,
+        )
+
+        x = x[np.isfinite(x)]
+
+        medians.append(
+            np.median(x)
+        )
+
+    Ns = np.asarray(Ns, dtype=float)
+    medians = np.asarray(medians, dtype=float)
+
+    positive = (
+        np.isfinite(medians)
+        & (medians > 0)
+        & np.isfinite(Ns)
+    )
+
+    Ns = Ns[positive]
+    medians = medians[positive]
+
+    if len(Ns) < 3:
+        raise ValueError(
+            "Insufficient positive finite points "
+            "for log-log scaling fit."
+        )
+
+    x = np.log(Ns)
+    y = np.log(medians)
+
+    slope, intercept = np.polyfit(
+        x,
+        y,
+        1,
+    )
+
+    yhat = intercept + slope * x
+
+    ss_res = np.sum(
+        (y - yhat) ** 2
+    )
+    ss_tot = np.sum(
+        (y - np.mean(y)) ** 2
+    )
+
+    r2 = (
+        1.0 - ss_res / ss_tot
+        if ss_tot > 0
+        else np.nan
+    )
+
+    # Bootstrap over Ns using the task-level distributions.
+    rng = np.random.default_rng(seed)
+
+    boot_alpha = []
+
+    per_N_values = [
+        np.asarray(
+            task_summary[int(N)],
+            dtype=float,
+        )
+        for N in Ns
+    ]
+
+    for _ in range(n_boot):
+
+        boot_medians = []
+
+        for values in per_N_values:
+
+            values = values[
+                np.isfinite(values)
+            ]
+
+            if len(values) == 0:
+                boot_medians.append(np.nan)
+            else:
+                sample = rng.choice(
+                    values,
+                    size=len(values),
+                    replace=True,
+                )
+                boot_medians.append(
+                    np.median(sample)
+                )
+
+        boot_medians = np.asarray(
+            boot_medians
+        )
+
+        if np.any(
+            ~np.isfinite(boot_medians)
+        ) or np.any(
+            boot_medians <= 0
+        ):
+            continue
+
+        alpha_b, _ = np.polyfit(
+            np.log(Ns),
+            np.log(boot_medians),
+            1,
+        )
+
+        boot_alpha.append(
+            alpha_b
+        )
+
+    boot_alpha = np.asarray(
+        boot_alpha,
+        dtype=float,
+    )
+
+    if len(boot_alpha):
+
+        alpha_lo = float(
+            np.quantile(
+                boot_alpha,
+                0.025,
+            )
+        )
+
+        alpha_hi = float(
+            np.quantile(
+                boot_alpha,
+                0.975,
+            )
+        )
+
+    else:
+
+        alpha_lo = np.nan
+        alpha_hi = np.nan
+
+    return {
+        "alpha": float(slope),
+        "alpha_lo": alpha_lo,
+        "alpha_hi": alpha_hi,
+        "intercept": float(intercept),
+        "r2": float(r2),
+    }
+
+def fig_scaling_prev(plt, data):
     fig, axes = plt.subplots(1, 2, figsize=(13.0, 5.4))
     for n, d in data.items():
         if not d["N"]:
@@ -498,7 +1129,386 @@ def fig_scaling(plt, data):
                  y=1.02, fontsize=12.5)
     save(plt, fig, "fig7_scaling")
 
+def fig_scaling(
+    plt,
+    records,
+    target_ptnr_db=60.0,
+):
+    """
+    Publication-oriented statistical scaling figure.
 
+    (a) Worst-null PTNR vs N
+    (b) Main-beam gain loss vs N
+    (c) Solver-reported evaluations vs N
+    (d) Success probability vs N
+
+    Error bands are 95% task-bootstrap confidence intervals.
+    """
+
+    ptnr_summary = aggregate_scaling_by_task(
+        records,
+        metric="worst_null",
+    )
+
+    gain_summary = aggregate_scaling_by_task(
+        records,
+        metric="gain_loss",
+    )
+
+    eval_summary = aggregate_scaling_by_task(
+        records,
+        metric="evals",
+    )
+
+    success_summary = aggregate_success_by_task(
+        records,
+        target_ptnr_db=target_ptnr_db,
+    )
+
+    fig, axes = plt.subplots(
+        2,
+        2,
+        figsize=(7.2, 5.8),
+        constrained_layout=True,
+    )
+
+    ax_ptnr = axes[0, 0]
+    ax_gain = axes[0, 1]
+    ax_eval = axes[1, 0]
+    ax_success = axes[1, 1]
+
+    all_N = sorted(
+        {
+            int(r["N"])
+            for r in records
+            if r.get("N") is not None
+        }
+    )
+
+    for solver in SCALE_SUBSET:
+
+        if solver not in ptnr_summary:
+            continue
+
+        Ns = sorted(
+            set(ptnr_summary[solver])
+        )
+
+        x = np.asarray(
+            Ns,
+            dtype=float,
+        )
+
+        style = solver_plot_style(
+            solver
+        )
+
+        # ---------------------------------------------------------
+        # (a) Worst-null PTNR
+        # ---------------------------------------------------------
+        med = []
+        lo = []
+        hi = []
+
+        for N in Ns:
+
+            c, l, h = bootstrap_ci(
+                ptnr_summary[solver][N]
+            )
+
+            med.append(c)
+            lo.append(l)
+            hi.append(h)
+
+        med = np.asarray(med)
+        lo = np.asarray(lo)
+        hi = np.asarray(hi)
+
+        ax_ptnr.plot(
+            x,
+            med,
+            **style,
+        )
+
+        ax_ptnr.fill_between(
+            x,
+            lo,
+            hi,
+            alpha=0.15,
+            linewidth=0,
+        )
+
+        # ---------------------------------------------------------
+        # (b) Gain loss
+        # ---------------------------------------------------------
+        if solver in gain_summary:
+
+            med = []
+            lo = []
+            hi = []
+
+            gain_Ns = sorted(
+                gain_summary[solver]
+            )
+
+            for N in gain_Ns:
+
+                c, l, h = bootstrap_ci(
+                    gain_summary[solver][N]
+                )
+
+                med.append(c)
+                lo.append(l)
+                hi.append(h)
+
+            ax_gain.plot(
+                gain_Ns,
+                med,
+                **style,
+            )
+
+            ax_gain.fill_between(
+                gain_Ns,
+                lo,
+                hi,
+                alpha=0.15,
+                linewidth=0,
+            )
+
+        # ---------------------------------------------------------
+        # (c) Evaluation count
+        # ---------------------------------------------------------
+        if solver in eval_summary:
+
+            med = []
+            lo = []
+            hi = []
+
+            eval_Ns = sorted(
+                eval_summary[solver]
+            )
+
+            for N in eval_Ns:
+
+                c, l, h = bootstrap_ci(
+                    eval_summary[solver][N]
+                )
+
+                med.append(c)
+                lo.append(l)
+                hi.append(h)
+
+            ax_eval.plot(
+                eval_Ns,
+                med,
+                **style,
+            )
+
+            ax_eval.fill_between(
+                eval_Ns,
+                lo,
+                hi,
+                alpha=0.15,
+                linewidth=0,
+            )
+
+        # ---------------------------------------------------------
+        # (d) Success probability
+        # ---------------------------------------------------------
+        if solver in success_summary:
+
+            success_Ns = sorted(
+                success_summary[solver]
+            )
+
+            med = []
+            lo = []
+            hi = []
+
+            for N in success_Ns:
+
+                c, l, h = bootstrap_ci(
+                    success_summary[solver][N],
+                    statistic=np.mean,
+                )
+
+                med.append(c)
+                lo.append(l)
+                hi.append(h)
+
+            ax_success.plot(
+                success_Ns,
+                med,
+                **style,
+            )
+
+            ax_success.fill_between(
+                success_Ns,
+                lo,
+                hi,
+                alpha=0.15,
+                linewidth=0,
+            )
+
+    # -------------------------------------------------------------
+    # Axis configuration
+    # -------------------------------------------------------------
+    for ax in axes.flat:
+
+        ax.set_xscale(
+            "log",
+            base=2,
+        )
+
+        ax.set_xticks(
+            all_N
+        )
+
+        ax.set_xticklabels(
+            [str(N) for N in all_N]
+        )
+
+        ax.set_xlabel(
+            "Array size $N$"
+        )
+
+        ax.grid(
+            alpha=0.25,
+            which="both",
+        )
+
+    ax_ptnr.set_ylabel(
+        "Worst-null PTNR (dB)"
+    )
+    ax_ptnr.set_title(
+        "(a) Nulling quality"
+    )
+
+    ax_gain.set_ylabel(
+        "Main-beam gain loss (dB)"
+    )
+    ax_gain.set_title(
+        "(b) Gain preservation"
+    )
+
+    ax_eval.set_ylabel(
+        "Reported solver evaluations"
+    )
+    ax_eval.set_yscale(
+        "log"
+    )
+    ax_eval.set_title(
+        "(c) Computational scaling"
+    )
+
+    ax_success.set_ylabel(
+        f"Success probability\n"
+        f"(PTNR ≥ {target_ptnr_db:.0f} dB)"
+    )
+    ax_success.set_ylim(
+        0.0,
+        1.05,
+    )
+    ax_success.set_title(
+        "(d) Reliability"
+    )
+
+    handles, labels = (
+        ax_ptnr.get_legend_handles_labels()
+    )
+
+    ax_ptnr.legend(
+        handles,
+        labels,
+        fontsize=6.5,
+        loc="best",
+        frameon=True,
+    )
+
+    fig.suptitle(
+        "Statistical scaling over randomized null-forming tasks",
+        fontsize=10.5,
+    )
+
+    save(
+        plt,
+        fig,
+        "fig7_scaling",
+    )
+
+    return fig
+
+def summarize_scaling(
+    records,
+    target_ptnr_db=60.0,
+):
+    """
+    Print paper-ready scaling statistics.
+    """
+
+    ptnr = aggregate_scaling_by_task(
+        records,
+        "worst_null",
+    )
+
+    costs = aggregate_scaling_by_task(
+        records,
+        "evals",
+    )
+
+    success = aggregate_success_by_task(
+        records,
+        target_ptnr_db,
+    )
+
+    print("\n=== Scaling summary ===")
+
+    for solver in SCALE_SUBSET:
+
+        if solver not in ptnr:
+            continue
+
+        print(f"\n{solver}")
+
+        for N in sorted(ptnr[solver]):
+
+            c, lo, hi = bootstrap_ci(
+                ptnr[solver][N]
+            )
+
+            if solver in costs and N in costs[solver]:
+
+                ec, elo, ehi = bootstrap_ci(
+                    costs[solver][N]
+                )
+
+            else:
+
+                ec = elo = ehi = np.nan
+
+            if (
+                solver in success
+                and N in success[solver]
+            ):
+
+                sc, slo, shi = bootstrap_ci(
+                    success[solver][N],
+                    statistic=np.mean,
+                )
+
+            else:
+
+                sc = slo = shi = np.nan
+
+            print(
+                f"  N={N:4d} | "
+                f"PTNR={c:6.2f} "
+                f"[{lo:6.2f}, {hi:6.2f}] | "
+                f"evals={ec:8.1f} "
+                f"[{elo:8.1f}, {ehi:8.1f}] | "
+                f"success={sc:.3f} "
+                f"[{slo:.3f}, {shi:.3f}]"
+            )
 # --------------------------------------------------------------------------- #
 # Figure 8 -- smooth-analytic vs discrete-measured manifold (the decisive plot)
 # --------------------------------------------------------------------------- #
@@ -632,10 +1642,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--N", type=int, default=32)
-    ap.add_argument("--tasks", type=int, default=8)
-    ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--tasks", type=int, default=30)
+    ap.add_argument("--seeds", type=int, default=10)
     ap.add_argument("--quick", action="store_true", help="tiny fast smoke run")
-    ap.add_argument("--scale-N", type=int, nargs="+", default=[16, 32, 64, 128, 256, 1024])
+    ap.add_argument("--scale-N", type=int, nargs="+", default=[16, 32, 64, 128, 256,512, 1024])
     ap.add_argument("--no-scaling", action="store_true")
     ap.add_argument("--no-realism", action="store_true")
     ap.add_argument("--no-patterns", action="store_true")
@@ -649,7 +1659,15 @@ def main():
     os.makedirs(FIGDIR, exist_ok=True)
     #element = SyntheticVaractor(beta=0.8, folding=True)
     element= MeasuredVaractor()
-    tasks = make_tasks(args.tasks)
+    tasks = make_tasks(
+        args.tasks
+    )
+
+    save_task_suite(
+        tasks,
+        "experiments/scaling_task_suite.json",
+    )
+
     seeds = list(range(args.seeds))
     names = list(B.SOLVERS.keys())
     ceiling = B.Problem(tasks[0], element, args.N).g_ceiling_db()
@@ -682,8 +1700,26 @@ def main():
     scaling = {}
     if not args.no_scaling:
         print("[3/4] Scaling sweep over N")
-        scaling = run_scaling(element, args.scale_N, quick=args.quick)
-        fig_scaling(plt, scaling)
+        
+        scaling = run_scaling(
+            element=element,
+            Ns=args.scale_N,
+            tasks=tasks,
+            seeds=seeds,
+            quick=args.quick,
+            discrete=True,
+        )
+
+        summarize_scaling(
+            scaling,
+            target_ptnr_db=60.0,
+        )
+
+        fig_scaling(
+            plt,
+            scaling,
+            target_ptnr_db=60.0,
+        )
 
     realism = []
     if not args.no_realism:

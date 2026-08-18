@@ -29,7 +29,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from beamformer.pattern_projection import Task
-from beamformer.element_model import SyntheticVaractor
+from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.api import beamform
 from beamformer.controllers.metrics import get_metrics
 from beamformer.synthesis import synthesize_schelkunoff
@@ -95,7 +95,7 @@ def run_case(name, N, task_u, element):
         ("ADMM",            lambda: S.solve_admm(tt, element, N, max_iter=200)),
         ("CMA-ES",          lambda: S.solve_cmaes(V0.copy(), tt, element, N, max_iter=120)),
         ("Dual annealing",  lambda: S.solve_sa_global(V0.copy(), tt, element, N, max_iter=80)),
-        ("OBH-ZKD (prior)", lambda: S.solve_obh_zkd(tt, element, N)),
+     #   ("OBH-ZKD (prior)", lambda: S.solve_obh_zkd(tt, element, N)),
     ]
     for label, fn in sota:
         out, ms = timed(fn)
@@ -111,7 +111,8 @@ def run_case(name, N, task_u, element):
 
 
 def main():
-    element = SyntheticVaractor(beta=0.8, folding=True)
+    #element = SyntheticVaractor(beta=0.8, folding=True)
+    element = MeasuredVaractor()
     cases = [
         ("Canonical", 32, Task("nulled", target_angles=[0.2], null_angles=[-0.4, 0.5])),
         ("Three nulls", 32, Task("nulled", target_angles=[0.0], null_angles=[-0.5, -0.25, 0.4])),

@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from beamformer.coherent_lcmv import _af, gain_locked_polish, solve_coherent_lcmv
+from beamformer.MR_LCMV_certified import _af, gain_locked_polish, solve_coherent_lcmv
 from beamformer.element_model import SyntheticVaractor, MeasuredVaractor
 from beamformer.pattern_projection import Task
 

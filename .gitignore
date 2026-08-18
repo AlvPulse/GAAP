@@ -50,3 +50,7 @@ experiments/comprehensive_comparisons/data/
 __pycache__/
 *.zip
 *.pdf
+*.png
+*.json
+*.dat
+*.npz

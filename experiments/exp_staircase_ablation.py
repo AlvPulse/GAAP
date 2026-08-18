@@ -47,7 +47,7 @@ def run_staircase_ablation(num_trials=50, N=64):
         # We need the full landscape to simulate the gauges
         for psi in psi_grid:
             V_n, c_n, _ = solve_coherent_lcmv(
-                task, element, N, n_dual_steps=8, psi_grid=[psi], return_history=True
+                task, element, N, n_dual_steps=1, psi_grid=[psi], return_history=True
             )
             pre_gain = 20 * np.log10(abs(_af(c_n, target_u, N)) / N + 1e-12)
             pre_null = 20 * np.log10(abs(_af(c_n, null_u, N)) + 1e-12)

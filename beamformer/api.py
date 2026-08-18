@@ -86,12 +86,32 @@ def beamform(
             suppress_sll=kwargs.get('suppress_sll', False),
             **{k: v for k, v in kwargs.items() if k not in ('refine', 'suppress_sll', 'solver')}
         )
-    elif solver == 'mrlcmv-convergence':
-        from .coherent_lcmv import beamform_mrlcmv_convergence
+    elif solver == 'mrlcmv-certified':
+        from .MR_LCMV_certified import beamform_mrlcmv
+        #print(kwargs)
+        return beamform_mrlcmv(
+        task=task,
+        element=element,
+        N=N,
+        refine=kwargs.get("refine", "reach"),
+        gauge=kwargs.get("gauge", "ptnr"),
+        gauge_samples=kwargs.get("gauge_samples", 24),
+        suppress_sll=kwargs.get("suppress_sll", False),
+        glcp_gain_floor=kwargs.get("glcp_gain_floor", 0.995),
+        )
+
+    elif solver == "mrlcmv-adaptive":
+        from .MR_LCMV_certified import beamform_mrlcmv_convergence
+
         return beamform_mrlcmv_convergence(
-            task, element, N,
-            suppress_sll=kwargs.get('suppress_sll', False),
-            **{k: v for k, v in kwargs.items() if k not in ('suppress_sll', 'solver')}
+            task=task,
+            element=element,
+            N=N,
+            refine=kwargs.get("refine", "glcp"),
+            gauge=kwargs.get("gauge", "ptnr"),
+            gauge_samples=kwargs.get("gauge_samples", 24),
+            suppress_sll=kwargs.get("suppress_sll", False),
+            glcp_gain_floor=kwargs.get("glcp_gain_floor", 0.995),
         )
     # Calculate optimal non-projection baseline for reference
     baseline_delta, baseline_c_n, baseline_V_n = optimize_offset_only(

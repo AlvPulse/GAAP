@@ -56,20 +56,51 @@ TASK_SEED = 20240617                          # fixed -> reproducible task set
 # --------------------------------------------------------------------------- #
 # Random task generation
 # --------------------------------------------------------------------------- #
-def make_tasks(n, u_max=0.6, max_nulls=3):
-    rng = np.random.default_rng(TASK_SEED)
+def make_tasks(n, u_max=0.6, max_nulls=3, seed=TASK_SEED):
+    """
+    Generate a reproducible benchmark task suite.
+
+    The task suite is the statistical population for deterministic solvers.
+    Each task contains:
+        - one target direction
+        - 1..max_nulls null directions
+        - minimum angular separation constraints
+
+    The same returned task suite must be reused for every N and every solver
+    in the scaling experiment.
+    """
+    rng = np.random.default_rng(seed)
+
     tasks = []
+
     while len(tasks) < n:
         ut = round(float(rng.uniform(-u_max, u_max)), 3)
+
         k = int(rng.integers(1, max_nulls + 1))
-        nulls, tries = [], 0
+
+        nulls = []
+        tries = 0
+
         while len(nulls) < k and tries < 60:
             un = round(float(rng.uniform(-0.9, 0.9)), 3)
-            if abs(un - ut) > 0.15 and all(abs(un - x) > 0.1 for x in nulls):
+
+            if (
+                abs(un - ut) > 0.15
+                and all(abs(un - x) > 0.1 for x in nulls)
+            ):
                 nulls.append(un)
+
             tries += 1
+
         if nulls:
-            tasks.append(Task("nulled", target_angles=[ut], null_angles=sorted(nulls)))
+            tasks.append(
+                Task(
+                    "nulled",
+                    target_angles=[ut],
+                    null_angles=sorted(nulls),
+                )
+            )
+
     return tasks
 
 
@@ -95,7 +126,8 @@ def budgets(quick=False):
         "OBH-ZKD (prior)":    dict(),
         "MR-LCMV (ours)":     dict(),
         "MR-LCMV+GLCP (ours)":dict(),
-        "MR-LCMV-adaptive":dict(),
+        "MR-LCMV-certified"  :dict(),
+        "MR-LCMV-adaptive":dict()
     }
     if quick:
         b.update({"PGD": dict(max_iter=60), "Differential Eq.": dict(maxiter=15),

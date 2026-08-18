@@ -43,7 +43,7 @@ from experiments.publication_figures import (init_style, save, FIGDIR, solver_co
                                              solver_marker, is_ours, _solve_weights)
 
 # Methods compared for robustness (one grid-native baseline + one DFO + ours).
-ROBUST_SOLVERS = ["MR-LCMV+GLCP (ours)", "Perturbation Null", "Coordinate Descent"]
+ROBUST_SOLVERS = ["MR-LCMV+GLCP (ours)", "MR-LCMV-certified", "Perturbation Null", "Coordinate Descent"]
 # Methods compared for significance (every method that ever digs a real null).
 SIG_SOLVERS = ["Perturbation Null", "Cross-Entropy", "Coordinate Descent",
                "CMA-ES", "OBH-ZKD (prior)", "MR-LCMV (ours)"]
@@ -77,7 +77,7 @@ def perturb_dead(c, rng, k):
 
 def run_robustness(element, tasks, N, draws, seed=0):
     rng = np.random.default_rng(seed)
-    phi_levels = [0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0]      # deg RMS phase jitter
+    phi_levels = [0.0, 0.25, 0.5, 0.75, 1.0,1.5, 2.0,2.5, 3.0]      # deg RMS phase jitter
     dead_levels = [0, 1, 2, 3, 4, 6, 8]                    # number of dead elements
     bud = budgets(False)
     # pre-solve device weights once per (solver, task)
