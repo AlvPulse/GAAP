@@ -121,16 +121,31 @@ def _get_manifold(element):
 def _retract(target, c_grid, V_grid):
     """
     Per-element manifold retraction by inner-product maximization.
-
-        c_n = argmax_{c in grid} Re( c * conj(target_n) )
-
-    target : (N,) complex desired field
-    returns (c_sel (N,), V_sel (N,), idx (N,))
+    Supports either unified manifold (c_grid is 1D) or element-specific
+    manifolds (c_grid is 2D shape (N, G)).
     """
-    # score[n, g] = Re( c_grid[g] * conj(target[n]) )
-    score = np.real(np.conj(target)[:, None] * c_grid[None, :])
-    idx = np.argmax(score, axis=1)
-    return c_grid[idx], V_grid[idx], idx
+    import numpy as np
+    c_grid = np.asarray(c_grid)
+    V_grid = np.asarray(V_grid)
+
+    if c_grid.ndim == 1:
+        # Unified manifold
+        score = np.real(np.conj(target)[:, None] * c_grid[None, :])
+        idx = np.argmax(score, axis=1)
+        return c_grid[idx], V_grid[idx], idx
+    else:
+        # Element-specific manifolds
+        N = len(target)
+        c_sel = np.zeros(N, dtype=complex)
+        v_sel = np.zeros(N)
+        idx_sel = np.zeros(N, dtype=int)
+        for n in range(N):
+            score_n = np.real(np.conj(target[n]) * c_grid[n])
+            best_idx = np.argmax(score_n)
+            idx_sel[n] = best_idx
+            c_sel[n] = c_grid[n, best_idx]
+            v_sel[n] = V_grid[n, best_idx]
+        return c_sel, v_sel, idx_sel
 
 
 def _af(c, u, N):

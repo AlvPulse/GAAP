@@ -293,3 +293,33 @@ class MeasuredVaractor(ElementData):
 
 if __name__ == "__main__":
     MeasuredVaractor()
+
+class SevereVDILVaractor:
+    """
+    Synthetic 'pinchy/bad' manifold to better highlight the algorithm's capability
+    against severe amplitude-phase coupling.
+    """
+    def __init__(self, folding=True):
+        self.v_min = 0.0
+        self.v_max = 2 * np.pi if folding else 0.8 * np.pi
+
+        self.V_grid = np.linspace(self.v_min, self.v_max, 360)
+
+        # Pinchy shape: high insertion loss at specific phases.
+        phases = self.V_grid
+        # swinging from -4.5dB to -1.5dB approximately
+        amplitudes = 0.6 + 0.35 * np.cos(phases + np.pi/4)
+
+        if folding:
+            # Over-range fills the pinch
+            amplitudes[phases > np.pi] = 0.85 + 0.1 * np.cos(phases[phases > np.pi])
+
+        self.c_grid = amplitudes * np.exp(1j * phases)
+        self.ideal_phases = phases
+        self.ideal_amplitudes = amplitudes
+
+    def get_complex_weight(self, V):
+        V = np.clip(V, self.v_min, self.v_max)
+        idx = np.searchsorted(self.V_grid, V)
+        if idx >= len(self.V_grid): idx = len(self.V_grid) - 1
+        return self.c_grid[idx]

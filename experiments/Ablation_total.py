@@ -420,6 +420,10 @@ def run_ablation(N=32, n_trials=30, n_nulls=1, seed=42, out_dir="ablation_result
             "n_trials": n,
             "oracle_mean": sub.oracle.mean(),
             "oracle_std": sub.oracle.std(ddof=1),
+            "glcp_mean": sub.glcp_moves.mean(),
+            "glcp_std": sub.glcp_moves.std(ddof=1),
+            "wall_mean": sub.wall_s.mean(),
+            "wall_std": sub.wall_s.std(ddof=1),
             "gain_mean": sub.gain_db.mean(),
             "gain_std": sub.gain_db.std(ddof=1),
             "null_mean": sub.null_db.mean(),
@@ -453,20 +457,20 @@ def run_ablation(N=32, n_trials=30, n_nulls=1, seed=42, out_dir="ablation_result
     lines = [
         r"\begin{table}[t]\centering",
         r"\caption{Full ablation of certified MR-LCMV "
-        r"(mean $\pm$ std, $N=%d$, %d tasks).}" % (N, n_trials),
+        r"(mean $\\±$ std, $N=%d$, %d tasks).}" % (N, n_trials),
         r"\label{tab:ablation}",
         r"\begin{tabular}{lcccc}",
         r"\toprule",
-        r"Config & Oracle & Gain (dB) & Null (dB) & Max SLL (dB) \\",
+        r"Config & $N_{AF}$ & $N_{cand}$ & Gain (dB) & Null (dB) \\",
         r"\midrule",
     ]
     for _, r in summary.iterrows():
         lines.append(
             f"{r['config_id']} & "
-            f"${r['oracle_mean']:.0f}\\pm{r['oracle_std']:.0f}$ & "
-            f"${r['gain_mean']:.2f}\\pm{r['gain_std']:.2f}$ & "
-            f"${r['null_mean']:.1f}\\pm{r['null_std']:.1f}$ & "
-            f"${r['sll_mean']:.1f}\\pm{r['sll_std']:.1f}$ \\\\"
+            f"${r['oracle_mean']:.0f}\\±{r['oracle_std']:.0f}$ & "
+            f"${r['glcp_mean']:.0f}\\±{r['glcp_std']:.0f}$ & "
+            f"${r['gain_mean']:.2f}\\±{r['gain_std']:.2f}$ & "
+            f"${r['null_mean']:.1f}\\±{r['null_std']:.1f}$ \\"
         )
     lines += [r"\bottomrule\end{tabular}\end{table}"]
     (Path(out_dir) / "ablation_table.tex").write_text("\n".join(lines))
