@@ -36,7 +36,7 @@ theta = np.linspace(0, 2*np.pi, 200)
 ax.plot(np.cos(theta), np.sin(theta), 'k--', alpha=0.3, label='Ideal Circle ($|c|=1$)')
 
 # Plot the 360 slice
-ax.plot(c_360.real, c_360.imag, color='blue', linewidth=2, label=r'Measured $360^{\circ}$ locus')
+ax.plot(c_360.real, c_360.imag, color='blue', linewidth=1.5, label=r'Measured $360^{\circ}$ locus')
 
 # Plot the folded over-range extension
 # Assuming the rest of the array beyond 360 length is the extension
@@ -47,9 +47,9 @@ if ext_len > 0:
 
 # Plot Convex Hull
 for simplex in hull.simplices:
-    ax.plot(points_folded[simplex, 0], points_folded[simplex, 1], 'g-', linewidth=1, alpha=0.6)
+    ax.plot(points_folded[simplex, 0], points_folded[simplex, 1], 'g-', linewidth=1, alpha=0.8)
 # Custom legend entry for hull
-ax.plot([], [], 'g-', linewidth=1, alpha=0.6, label='Convex Hull ($c_W$)')
+ax.plot([], [], 'g-', linewidth=1, alpha=0.8, label='Convex Hull ($c_W$)')
 
 ax.set_aspect('equal', 'box')
 ax.set_xlim([-1.1, 1.1])
