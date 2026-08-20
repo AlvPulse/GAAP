@@ -4,7 +4,7 @@ import os
 
 os.makedirs("experiments/figures_measured", exist_ok=True)
 
-df = pd.read_csv("experiments/results/convergence_scaling.csv")
+df = pd.read_csv("experiments/data/convergence_scaling.csv")
 
 # IEEE Double-Column Formatting Standards
 # Column width is typically ~3.5 inches
@@ -36,7 +36,7 @@ plt.xticks(df['N'].unique(), labels=[str(int(n)) for n in df['N'].unique()])
 plt.legend(loc='best', framealpha=0.9, edgecolor='0.8')
 plt.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout(pad=0.5)
-plt.savefig("experiments/figures_measured/plot2_null_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("experiments/figures/plot2_null_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
 plt.close()
 
 # Plot 3: Iterations-to-convergence vs N
@@ -53,7 +53,7 @@ if not cert.empty and not adapt.empty:
     plt.legend(loc='upper left', framealpha=0.9, edgecolor='0.8')
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.tight_layout(pad=0.5)
-    plt.savefig("experiments/figures_measured/plot3_iterations_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
+    plt.savefig("experiments/figures/plot3_iterations_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
 plt.close()
 
 # Plot 4: Worst-null depth vs full AF evaluations
@@ -68,7 +68,7 @@ plt.xscale('log')
 plt.legend(loc='lower right', framealpha=0.9, edgecolor='0.8')
 plt.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout(pad=0.5)
-plt.savefig("experiments/figures_measured/plot4_null_vs_evals_IEEE.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("experiments/figures/plot4_null_vs_evals_IEEE.pdf", format='pdf', bbox_inches='tight')
 plt.close()
 
 # Plot 5: Equivalent cost / runtime scaling vs N
@@ -84,7 +84,7 @@ plt.yscale('log')
 plt.legend(loc='upper left', framealpha=0.9, edgecolor='0.8')
 plt.grid(True, linestyle='--', alpha=0.6)
 plt.tight_layout(pad=0.5)
-plt.savefig("experiments/figures_measured/plot5_runtime_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("experiments/figures/plot5_runtime_vs_n_IEEE.pdf", format='pdf', bbox_inches='tight')
 plt.close()
 
-print("IEEE-styled PDFs successfully generated in experiments/figures_measured/")
+print("IEEE-styled PDFs successfully generated in experiments/figures/")

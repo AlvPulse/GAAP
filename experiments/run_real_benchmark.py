@@ -55,5 +55,5 @@ for N in N_VALUES:
     })
 
 df = pd.DataFrame(all_data)
-df.to_csv("experiments/results/convergence_scaling.csv", index=False)
+df.to_csv("experiments/data/convergence_scaling.csv", index=False)
 print("Real data saved.")

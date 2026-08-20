@@ -60,6 +60,6 @@ ax.grid(True, linestyle='--', alpha=0.5)
 
 plt.legend(loc='lower left', framealpha=0.9, edgecolor='0.8')
 plt.tight_layout(pad=0.5)
-plt.savefig("experiments/figures_measured/fig1_measured_hardware_locus_IEEE.pdf", format='pdf', bbox_inches='tight')
+plt.savefig("experiments/figures/fig1_measured_hardware_locus_IEEE.pdf", format='pdf', bbox_inches='tight')
 
-print("Generated Hardware VNA Locus plot: experiments/figures_measured/fig1_measured_hardware_locus_IEEE.pdf")
+print("Generated Hardware VNA Locus plot: experiments/figures/fig1_measured_hardware_locus_IEEE.pdf")

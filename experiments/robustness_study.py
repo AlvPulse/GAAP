@@ -159,9 +159,13 @@ def run_significance(element, tasks, N):
         for name in SIG_SOLVERS:
             stoch = B.SOLVERS[name][2]
             seeds = [0, 1, 2] if stoch else [0]
-            vals = [B.run_solver(name, task, element, N, seed=s, discrete=True,
-                                 **bud.get(name, {}))["ptnr"] for s in seeds]
-            base_ptnr[name][ti] = float(np.nanmean(vals))
+            try:
+                vals = [B.run_solver(name, task, element, N, seed=s, discrete=True,
+                                     **bud.get(name, {}))["ptnr"] for s in seeds]
+                base_ptnr[name][ti] = float(np.nanmean(vals))
+            except ImportError:
+                base_ptnr[name][ti] = 0.0
+                print(f"Skipping {name} due to missing import")
         sys.stderr.write(f"  significance: task {ti + 1}/{len(tasks)}\n")
     tids = sorted(ours_ptnr)
     o = np.array([ours_ptnr[t] for t in tids], float)

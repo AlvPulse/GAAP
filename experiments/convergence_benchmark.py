@@ -81,8 +81,8 @@ def run_benchmarks():
         print(f"  Adaptive: Null={res_adapt['worst_null']:.2f} dB, Evals={res_adapt['evals']}")
 
     df = pd.DataFrame(all_data)
-    df.to_csv("experiments/results/convergence_scaling.csv", index=False)
-    print("\nSaved scaling data to experiments/results/convergence_scaling.csv")
+    df.to_csv("experiments/data/convergence_scaling.csv", index=False)
+    print("\nSaved scaling data to experiments/data/convergence_scaling.csv")
 
 if __name__ == "__main__":
     run_benchmarks()

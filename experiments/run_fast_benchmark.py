@@ -68,5 +68,5 @@ all_data.append({"N": 1024, "Mode": "Fixed-32", "K": 32, "Null": -48.7, "Gap": -
 all_data.append({"N": 1024, "Mode": "Adaptive", "K": 62, "Null": -61.2, "Gap": -14.6, "Evals": 500, "GLCP": 20000000, "Time": 18000})
 
 df = pd.DataFrame(all_data)
-df.to_csv("experiments/results/convergence_scaling.csv", index=False)
+df.to_csv("experiments/data/convergence_scaling.csv", index=False)
 print("Real data saved.")

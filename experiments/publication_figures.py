@@ -1512,7 +1512,7 @@ def summarize_scaling(
 # --------------------------------------------------------------------------- #
 # Figure 8 -- smooth-analytic vs discrete-measured manifold (the decisive plot)
 # --------------------------------------------------------------------------- #
-def run_realism(element, tasks, N=32, quick=False):
+def run_realism(element, tasks, N=64, quick=False):
     bud = budgets(quick)
     names = list(B.SOLVERS.keys())
     sub = tasks[:min(2, len(tasks))]
