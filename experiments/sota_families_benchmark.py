@@ -371,8 +371,9 @@ def print_profile(taus, prof, names, P):
 SCALE_SUBSET = ["Coordinate Descent", "Riemannian CG", "Scaled ADMM",
                 "Perturbation Null", "OBH-ZKD (prior)",
                 "MR-LCMV (ours)", "MR-LCMV+GLCP (ours)"]
-OURS_LO = "MR-LCMV (ours)"
-OURS_HI = "MR-LCMV+GLCP (ours)"
+
+
+
 
 
 
