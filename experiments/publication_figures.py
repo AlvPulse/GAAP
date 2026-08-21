@@ -1456,7 +1456,7 @@ def summarize_scaling(
         "evals",
     )
 
-    success = aggregate_success_by_task(
+    success = aggregate_scaling_by_task(
         records,
         target_ptnr_db,
     )
