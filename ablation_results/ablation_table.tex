@@ -1,31 +1,31 @@
 \begin{table}[t]\centering
-\caption{Full ablation of certified MR-LCMV (mean $\pm$ std, $N=32$, 30 tasks).}
+\caption{Full ablation of certified MR-LCMV (mean $\\\pm$ std, $N=32$, 30 tasks).}
 \label{tab:ablation}
 \begin{tabular}{lcccc}
 \toprule
-Config & Oracle & Gain (dB) & Null (dB) & Max SLL (dB) \\
+Config & $N_{AF}$ & $N_{cand}$ & Gain (dB) & Null (dB) \\
 \midrule
-A0_full & $491\pm68$ & $-5.16\pm0.39$ & $-74.0\pm7.3$ & $16.8\pm2.7$ \\
-A1_no_gauge & $20\pm7$ & $-5.22\pm0.39$ & $-55.5\pm15.5$ & $16.9\pm2.4$ \\
-A2_no_glcp & $491\pm68$ & $-5.22\pm0.30$ & $-54.0\pm9.9$ & $17.4\pm2.3$ \\
-A3_no_gain_lock & $491\pm68$ & $-5.18\pm0.46$ & $-75.0\pm6.7$ & $16.9\pm2.4$ \\
-A4_no_lcmv & $0\pm0$ & $-5.18\pm0.40$ & $-28.4\pm32.1$ & $16.9\pm2.5$ \\
-A5_single_shot & $72\pm0$ & $-5.12\pm0.36$ & $-62.0\pm25.0$ & $17.0\pm2.8$ \\
-A6_fixed_budget & $748\pm33$ & $-5.17\pm0.46$ & $-74.5\pm7.0$ & $17.3\pm1.8$ \\
-A7_no_warmstart & $491\pm68$ & $-5.16\pm0.39$ & $-74.0\pm7.3$ & $16.8\pm2.7$ \\
-B_folding_on & $454\pm47$ & $-4.13\pm0.32$ & $-73.8\pm5.4$ & $16.6\pm2.2$ \\
-B_folding_off & $440\pm51$ & $-4.84\pm0.33$ & $-64.0\pm4.9$ & $17.0\pm3.3$ \\
-B_beta_low & $353\pm36$ & $-1.51\pm0.09$ & $-71.3\pm6.0$ & $14.0\pm1.1$ \\
-B_beta_high & $513\pm61$ & $-6.15\pm0.47$ & $-75.0\pm5.4$ & $17.1\pm3.0$ \\
-B_alpha_0 & $286\pm45$ & $-0.02\pm0.03$ & $-52.3\pm4.4$ & $15.0\pm0.9$ \\
-B_alpha_1 & $335\pm45$ & $-0.14\pm0.04$ & $-65.6\pm4.3$ & $15.1\pm1.0$ \\
-B_measured & $338\pm30$ & $-1.16\pm0.13$ & $-78.7\pm6.9$ & $15.8\pm1.6$ \\
-C1_gain_gauge & $1378\pm176$ & $-4.90\pm0.43$ & $-58.8\pm7.8$ & $17.7\pm2.5$ \\
-C2_reachability & $1378\pm176$ & $-4.90\pm0.43$ & $-58.8\pm7.8$ & $17.7\pm2.5$ \\
-C3_gauge_half & $244\pm36$ & $-5.16\pm0.41$ & $-69.4\pm6.6$ & $17.0\pm2.7$ \\
-C3_gauge_double & $967\pm119$ & $-5.12\pm0.39$ & $-77.0\pm6.7$ & $17.2\pm2.6$ \\
-D1_no_sll & $491\pm68$ & $-5.16\pm0.39$ & $-74.0\pm7.3$ & $16.8\pm2.7$ \\
-D2_sll_aggressive & $7191\pm1590$ & $-8.33\pm2.11$ & $-27.7\pm14.8$ & $12.8\pm2.4$ \\
-D3_ridge_zero & $491\pm69$ & $-5.16\pm0.39$ & $-74.0\pm7.3$ & $16.8\pm2.7$ \\
-D3_ridge_large & $491\pm68$ & $-5.20\pm0.44$ & $-75.8\pm7.7$ & $16.9\pm2.3$ \\
+A0_full & $491\\pm68$ & $173\\pm90$ & $-5.16\\pm0.39$ & $-74.0\\pm7.3$ \
+A1_no_gauge & $20\\pm7$ & $7\\pm5$ & $-5.22\\pm0.39$ & $-55.5\\pm15.5$ \
+A2_no_glcp & $491\\pm68$ & $0\\pm0$ & $-5.22\\pm0.30$ & $-54.0\\pm9.9$ \
+A3_no_gain_lock & $491\\pm68$ & $149\\pm47$ & $-5.18\\pm0.46$ & $-75.0\\pm6.7$ \
+A4_no_lcmv & $0\\pm0$ & $16\\pm5$ & $-5.18\\pm0.40$ & $-28.4\\pm32.1$ \
+A5_single_shot & $72\\pm0$ & $418\\pm94$ & $-5.12\\pm0.36$ & $-62.0\\pm25.0$ \
+A6_fixed_budget & $748\\pm33$ & $156\\pm81$ & $-5.17\\pm0.46$ & $-74.5\\pm7.0$ \
+A7_no_warmstart & $491\\pm68$ & $173\\pm90$ & $-5.16\\pm0.39$ & $-74.0\\pm7.3$ \
+B_folding_on & $454\\pm47$ & $151\\pm82$ & $-4.13\\pm0.32$ & $-73.8\\pm5.4$ \
+B_folding_off & $440\\pm51$ & $108\\pm61$ & $-4.84\\pm0.33$ & $-64.0\\pm4.9$ \
+B_beta_low & $353\\pm36$ & $93\\pm48$ & $-1.51\\pm0.09$ & $-71.3\\pm6.0$ \
+B_beta_high & $513\\pm61$ & $188\\pm98$ & $-6.15\\pm0.47$ & $-75.0\\pm5.4$ \
+B_alpha_0 & $286\\pm45$ & $27\\pm21$ & $-0.02\\pm0.03$ & $-52.3\\pm4.4$ \
+B_alpha_1 & $335\\pm45$ & $142\\pm95$ & $-0.14\\pm0.04$ & $-65.6\\pm4.3$ \
+B_measured & $338\\pm30$ & $150\\pm42$ & $-1.16\\pm0.13$ & $-78.7\\pm6.9$ \
+C1_gain_gauge & $1378\\pm176$ & $6\\pm4$ & $-4.90\\pm0.43$ & $-58.8\\pm7.8$ \
+C2_reachability & $1378\\pm176$ & $6\\pm4$ & $-4.90\\pm0.43$ & $-58.8\\pm7.8$ \
+C3_gauge_half & $244\\pm36$ & $90\\pm53$ & $-5.16\\pm0.41$ & $-69.4\\pm6.6$ \
+C3_gauge_double & $967\\pm119$ & $347\\pm179$ & $-5.12\\pm0.39$ & $-77.0\\pm6.7$ \
+D1_no_sll & $491\\pm68$ & $173\\pm90$ & $-5.16\\pm0.39$ & $-74.0\\pm7.3$ \
+D2_sll_aggressive & $7191\\pm1590$ & $498\\pm184$ & $-8.33\\pm2.11$ & $-27.7\\pm14.8$ \
+D3_ridge_zero & $491\\pm69$ & $173\\pm90$ & $-5.16\\pm0.39$ & $-74.0\\pm7.3$ \
+D3_ridge_large & $491\\pm68$ & $176\\pm89$ & $-5.20\\pm0.44$ & $-75.8\\pm7.7$ \
 \bottomrule\end{tabular}\end{table}

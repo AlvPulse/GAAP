@@ -1456,7 +1456,7 @@ def summarize_scaling(
         "evals",
     )
 
-    success = aggregate_success_by_task(
+    success = aggregate_scaling_by_task(
         records,
         target_ptnr_db,
     )
@@ -1512,7 +1512,7 @@ def summarize_scaling(
 # --------------------------------------------------------------------------- #
 # Figure 8 -- smooth-analytic vs discrete-measured manifold (the decisive plot)
 # --------------------------------------------------------------------------- #
-def run_realism(element, tasks, N=32, quick=False):
+def run_realism(element, tasks, N=64, quick=False):
     bud = budgets(quick)
     names = list(B.SOLVERS.keys())
     sub = tasks[:min(2, len(tasks))]
@@ -1746,14 +1746,9 @@ def main():
                for i, t in enumerate(taus)}) for n in names],
               ["solver"] + [f"tau_{int(t) if t < 1e8 else 'inf'}" for t in taus])
     if scaling:
-        srows = []
-        for n, d in scaling.items():
-            for i, N in enumerate(d["N"]):
-                srows.append(dict(solver=n, N=N, ptnr=d["ptnr"][i],
-                                  worst_null=d["wn"][i], evals=d["evals"][i],
-                                  glcp_updates=d["glcp"][i]))
-        write_csv(os.path.join(FIGDIR, "pub_scaling.csv"), srows,
-                  ["solver", "N", "ptnr", "worst_null", "evals", "glcp_updates"])
+        # scaling is a list of dicts directly from run_scaling
+        write_csv(os.path.join(FIGDIR, "pub_scaling.csv"), scaling,
+                  ["solver", "N", "ptnr", "worst_null", "evals", "glcp_updates", "ms", "error"])
     if realism:
         write_csv(os.path.join(FIGDIR, "pub_realism.csv"), realism,
                   ["solver", "family", "smooth", "discrete", "collapse"])

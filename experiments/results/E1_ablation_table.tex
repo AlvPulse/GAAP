@@ -1,0 +1,15 @@
+\begin{table}[h]
+\centering
+\caption{E1: MR-LCMV Component Ablation (N=64, Measured Varactor)}
+\begin{tabular}{llcccc}
+\toprule
+Config & Description & Gain (dB) & Null (dB) & $N_{AF}$ & $N_{cand}$ \\
+\midrule
+A0\_full & Full System (MR-LCMV+GLCP+PTNR Gauge) & -1.14 & -64.2 & 447 & 2080000 \\
+A1\_no\_gauge & No Gauge (psi=0) & -1.17 & -45.3 & 23 & 96000 \\
+A2\_no\_glcp & No GLCP (Dual correction only) & -1.11 & -32.1 & 447 & 768000 \\
+A3\_no\_gain\_lock & No Gain Lock (GLCP accepts pure null drops) & -1.14 & -64.2 & 447 & 1984000 \\
+A4\_no\_lcmv & No LCMV Dual (Retraction + GLCP only) & -1.29 & -18.5 & 96 & 2496000 \\
+\bottomrule
+\end{tabular}
+\end{table}

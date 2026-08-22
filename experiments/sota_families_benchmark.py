@@ -22,7 +22,7 @@ voltages on the real manifold) and is scored by the SAME u-space metrics
   Prior proposed   OBH-ZKD
   Ours             MR-LCMV  and  MR-LCMV+GLCP
 
-Outputs (under experiments/results/):
+Outputs (under experiments/data/):
   families_runs.csv        every (solver, task, seed) row
   families_summary.csv     per-solver aggregate
   families_profile.csv     performance-profile data
@@ -371,6 +371,10 @@ def print_profile(taus, prof, names, P):
 SCALE_SUBSET = ["Coordinate Descent", "Riemannian CG", "Scaled ADMM",
                 "Perturbation Null", "OBH-ZKD (prior)",
                 "MR-LCMV (ours)", "MR-LCMV+GLCP (ours)"]
+
+
+
+
 
 
 def run_scaling(Ns, plot=False):
