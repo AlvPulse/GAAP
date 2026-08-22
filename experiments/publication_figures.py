@@ -1746,14 +1746,9 @@ def main():
                for i, t in enumerate(taus)}) for n in names],
               ["solver"] + [f"tau_{int(t) if t < 1e8 else 'inf'}" for t in taus])
     if scaling:
-        srows = []
-        for n, d in scaling.items():
-            for i, N in enumerate(d["N"]):
-                srows.append(dict(solver=n, N=N, ptnr=d["ptnr"][i],
-                                  worst_null=d["wn"][i], evals=d["evals"][i],
-                                  glcp_updates=d["glcp"][i]))
-        write_csv(os.path.join(FIGDIR, "pub_scaling.csv"), srows,
-                  ["solver", "N", "ptnr", "worst_null", "evals", "glcp_updates"])
+        # scaling is a list of dicts directly from run_scaling
+        write_csv(os.path.join(FIGDIR, "pub_scaling.csv"), scaling,
+                  ["solver", "N", "ptnr", "worst_null", "evals", "glcp_updates", "ms", "error"])
     if realism:
         write_csv(os.path.join(FIGDIR, "pub_realism.csv"), realism,
                   ["solver", "family", "smooth", "discrete", "collapse"])

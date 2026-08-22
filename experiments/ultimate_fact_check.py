@@ -93,7 +93,7 @@ def run_ultimate_trial(seed, N, algo_name, B_total=150):
     lr_min = 0.001
     lr_max = 0.2
 
-    c_n, current_delta, V_n, res, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
+    c_n, V_n, res, _null, _gain, _ptnr, _ = step_ap_lr(c_n, current_delta, V_n, task, element, step_size=lr_step)
     null_depth, gain, current_ptnr = get_metrics(c_n, task, element)
     current_cost = -current_ptnr
 
